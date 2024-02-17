@@ -146,7 +146,7 @@ impl TypeInfo
 	}
 }
 
-fn try_type_info_impl
+fn try_forward_receiver_impl
 (
 	_attr: proc_macro::TokenStream,
 	item: proc_macro::TokenStream
@@ -165,14 +165,14 @@ fn try_type_info_impl
 	Ok (tokens)
 }
 
-pub fn type_info_impl
+pub fn forward_receiver_impl
 (
 	attr: proc_macro::TokenStream,
 	item: proc_macro::TokenStream
 )
 -> proc_macro::TokenStream
 {
-	try_type_info_impl (attr, item)
+	try_forward_receiver_impl (attr, item)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }

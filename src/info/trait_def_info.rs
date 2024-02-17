@@ -280,7 +280,7 @@ impl From <ItemTrait> for TraitDefInfo
 	}
 }
 
-fn try_trait_info_impl
+fn try_forwardable_impl
 (
 	_attr: proc_macro::TokenStream,
 	item: proc_macro::TokenStream
@@ -301,14 +301,14 @@ fn try_trait_info_impl
 	Ok (tokens)
 }
 
-pub fn trait_info_impl
+pub fn forwardable_impl
 (
 	attr: proc_macro::TokenStream,
 	item: proc_macro::TokenStream
 )
 -> proc_macro::TokenStream
 {
-	try_trait_info_impl (attr, item)
+	try_forwardable_impl (attr, item)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }

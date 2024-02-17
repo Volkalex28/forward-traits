@@ -59,7 +59,7 @@ where I: IntoIterator <Item = &'a Signature>
 }
 
 #[derive (Parse)]
-struct ForwardConversionTraitCore
+struct ForwardTraitViaConversionCore
 {
 	base_type_ident: Ident,
 	_bt_comma: Token! [,],
@@ -76,10 +76,10 @@ struct ForwardConversionTraitCore
 	forwarded_trait_info: TraitDefInfo
 }
 
-fn try_forward_conversion_trait_core_impl (input: proc_macro::TokenStream)
+fn try_forward_trait_via_conversion_core_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let ForwardConversionTraitCore
+	let ForwardTraitViaConversionCore
 	{
 		base_type_ident,
 		delegated_type,
@@ -160,10 +160,10 @@ fn try_forward_conversion_trait_core_impl (input: proc_macro::TokenStream)
 	Ok (tokens)
 }
 
-pub fn forward_conversion_trait_core_impl (input: proc_macro::TokenStream)
+pub fn forward_trait_via_conversion_core_impl (input: proc_macro::TokenStream)
 -> proc_macro::TokenStream
 {
-	try_forward_conversion_trait_core_impl (input)
+	try_forward_trait_via_conversion_core_impl (input)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }
@@ -183,7 +183,7 @@ struct ConversionForward
 	forwarded_traits: Punctuated <Path, Token! [,]>
 }
 
-fn try_forward_conversion_trait_impl (input: proc_macro::TokenStream)
+fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
 	let ConversionForward
@@ -208,7 +208,7 @@ fn try_forward_conversion_trait_impl (input: proc_macro::TokenStream)
 			#base_type_macro_ident!
 			(
 				#forwarded_trait_macro_path,
-				forward_traits::forward_conversion_trait_core,
+				forward_traits::forward_trait_via_conversion_core,
 				#base_type_ident,
 				#delegated_type,
 				#forwarded_trait
@@ -220,10 +220,10 @@ fn try_forward_conversion_trait_impl (input: proc_macro::TokenStream)
 	Ok (tokens)
 }
 
-pub fn forward_conversion_trait_impl (input: proc_macro::TokenStream)
+pub fn forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 -> proc_macro::TokenStream
 {
-	try_forward_conversion_trait_impl (input)
+	try_forward_trait_via_conversion_impl (input)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }
