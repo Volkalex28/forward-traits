@@ -11,6 +11,7 @@ use syn
 	Token,
 	parse_quote
 };
+use syn::token::SelfValue;
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use quote::{quote, ToTokens};
@@ -20,11 +21,15 @@ use crate::info::generics::{ParameterInfo, ParameterValue};
 use crate::info::TraitImplInfo;
 use crate::uncurry::uncurry_macro_ident;
 
-pub struct ReceiverTransforms
+pub struct ReceiverTransforms <FR, FM, FO>
+where
+	FR: Fn (&SelfValue) -> Expr,
+	FM: Fn (&SelfValue) -> Expr,
+	FO: Fn (&SelfValue) -> Expr
 {
-	pub transform_ref: Expr,
-	pub transform_ref_mut: Expr,
-	pub transform_owned: Expr
+	pub transform_ref: FR,
+	pub transform_ref_mut: FM,
+	pub transform_owned: FO
 }
 
 pub fn get_trait_parameter_values (forwarded_trait: &Path)
@@ -93,14 +98,18 @@ fn gen_forwarded_associated_type
 	}
 }
 
-fn gen_forwarded_method
+fn gen_forwarded_method <FR, FM, FO>
 (
 	delegated_type: &Type,
 	forwarded_trait: &Path,
 	method_signature: Signature,
-	receiver_transforms: &ReceiverTransforms
+	receiver_transforms: &ReceiverTransforms <FR, FM, FO>
 )
 -> proc_macro2::TokenStream
+where
+	FR: Fn (&SelfValue) -> Expr,
+	FM: Fn (&SelfValue) -> Expr,
+	FO: Fn (&SelfValue) -> Expr
 {
 	let Signature {asyncness, ident, generics, inputs, output, ..} =
 		method_signature;
@@ -111,22 +120,25 @@ fn gen_forwarded_method
 		(
 			|fn_arg| match fn_arg
 			{
-				FnArg::Receiver (receiver) => match
-				(
-					receiver . reference . is_some (),
-					receiver . mutability . is_some ()
-				)
+				FnArg::Receiver (receiver) =>
 				{
-					(false, false) =>
-						receiver_transforms . transform_owned . clone (),
-					(false, true) =>
-						receiver_transforms . transform_owned . clone (),
-					(true, false) =>
-						receiver_transforms . transform_ref . clone (),
-					(true, true) =>
-						receiver_transforms . transform_ref_mut . clone ()
+					let self_token = &receiver . self_token;
+
+					if receiver . ty == parse_quote! (&Self)
+					{
+						(receiver_transforms . transform_ref) (self_token)
+					}
+					else if receiver . ty == parse_quote! (&mut Self)
+					{
+						(receiver_transforms . transform_ref_mut) (self_token)
+					}
+					else if receiver . ty == parse_quote! (Self)
+					{
+						(receiver_transforms . transform_owned) (self_token)
+					}
+					else { unreachable! (); }
+						. into_token_stream ()
 				}
-					. into_token_stream (),
 				FnArg::Typed (pat_type) => pat_type . pat . to_token_stream ()
 			}
 		);
@@ -136,7 +148,7 @@ fn gen_forwarded_method
 
 	let type_generics = type_generics . as_turbofish ();
 
-	quote!
+	let tokens = quote!
 	{
 		#asyncness fn #ident #impl_generics (#inputs) #output
 		#where_clause
@@ -144,7 +156,9 @@ fn gen_forwarded_method
 			<#delegated_type as #forwarded_trait>
 				::#ident #type_generics (#(#args),*)
 		}
-	}
+	};
+
+	tokens
 }
 
 fn gen_forwarded_const
@@ -163,18 +177,22 @@ fn gen_forwarded_const
 	}
 }
 
-pub fn gen_forwarded_trait
+pub fn gen_forwarded_trait <FR, FM, FO>
 (
-	base_type: Type,
+	base_type: &Type,
 	type_parameters: Punctuated <ParameterInfo, Token! [,]>,
 	type_predicates: Punctuated <WherePredicate, Token! [,]>,
-	forwarded_trait: Path,
+	forwarded_trait: &Path,
 	trait_info: TraitImplInfo,
-	delegated_type: Type,
+	delegated_type: &Type,
 	receiver_predicates: Vec <WherePredicate>,
-	receiver_transforms: ReceiverTransforms
+	receiver_transforms: ReceiverTransforms <FR, FM, FO>
 )
 -> proc_macro2::TokenStream
+where
+	FR: Fn (&SelfValue) -> Expr,
+	FM: Fn (&SelfValue) -> Expr,
+	FO: Fn (&SelfValue) -> Expr
 {
 	let mut predicates = type_predicates;
 	predicates
@@ -193,8 +211,8 @@ pub fn gen_forwarded_trait
 		(
 			|associated_type_ident| gen_forwarded_associated_type
 			(
-				&delegated_type,
-				&forwarded_trait,
+				delegated_type,
+				forwarded_trait,
 				associated_type_ident
 			)
 		);
@@ -206,8 +224,8 @@ pub fn gen_forwarded_trait
 		(
 			|method_signature| gen_forwarded_method
 			(
-				&delegated_type,
-				&forwarded_trait,
+				delegated_type,
+				forwarded_trait,
 				method_signature,
 				&receiver_transforms
 			)
@@ -220,8 +238,8 @@ pub fn gen_forwarded_trait
 		(
 			|TypedIdent {ident, ty, ..}| gen_forwarded_const
 			(
-				&delegated_type,
-				&forwarded_trait,
+				delegated_type,
+				forwarded_trait,
 				ident,
 				ty
 			)

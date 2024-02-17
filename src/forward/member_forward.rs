@@ -141,19 +141,22 @@ fn try_forward_trait_via_member_core_impl (input: proc_macro::TokenStream)
 
 			let receiver_transforms = ReceiverTransforms
 			{
-				transform_ref: parse_quote! (&self . #member_ident),
-				transform_ref_mut: parse_quote! (&mut self . #member_ident),
-				transform_owned: parse_quote! (self . #member_ident)
+				transform_ref:
+					|self_token| parse_quote! (&#self_token . #member_ident),
+				transform_ref_mut:
+					|self_token| parse_quote! (&mut #self_token . #member_ident),
+				transform_owned:
+					|self_token| parse_quote! (#self_token . #member_ident)
 			};
 
 			let tokens = gen_forwarded_trait
 			(
-				base_type,
+				&base_type,
 				type_info . parameters,
 				type_info . predicates,
-				forwarded_trait,
+				&forwarded_trait,
 				forwarded_trait_info,
-				member_type,
+				&member_type,
 				receiver_predicates,
 				receiver_transforms
 			);
@@ -172,19 +175,22 @@ fn try_forward_trait_via_member_core_impl (input: proc_macro::TokenStream)
 
 			let receiver_transforms = ReceiverTransforms
 			{
-				transform_ref: parse_quote! (&self . #member_index),
-				transform_ref_mut: parse_quote! (&mut self . #member_index),
-				transform_owned: parse_quote! (self . #member_index)
+				transform_ref:
+					|self_token| parse_quote! (&#self_token . #member_index),
+				transform_ref_mut:
+					|self_token| parse_quote! (&mut #self_token . #member_index),
+				transform_owned:
+					|self_token| parse_quote! (#self_token . #member_index)
 			};
 
 			let tokens = gen_forwarded_trait
 			(
-				base_type,
+				&base_type,
 				type_info . parameters,
 				type_info . predicates,
-				forwarded_trait,
+				&forwarded_trait,
 				forwarded_trait_info,
-				member_type,
+				&member_type,
 				receiver_predicates,
 				receiver_transforms
 			);

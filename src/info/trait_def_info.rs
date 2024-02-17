@@ -207,9 +207,11 @@ impl TraitDefInfo
 	}
 }
 
-impl From <ItemTrait> for TraitDefInfo
+impl TryFrom <ItemTrait> for TraitDefInfo
 {
-	fn from (item_trait: ItemTrait) -> TraitDefInfo
+	type Error = Error;
+
+	fn try_from (item_trait: ItemTrait) -> Result <TraitDefInfo>
 	{
 		let visibility = item_trait . vis;
 
@@ -243,6 +245,23 @@ impl From <ItemTrait> for TraitDefInfo
 				},
 				TraitItem::Fn (method) =>
 				{
+					if let Some (receiver) = method . sig . receiver ()
+					{
+						if receiver . ty != parse_quote! (&Self)
+							&& receiver . ty != parse_quote! (&mut Self)
+							&& receiver . ty != parse_quote! (Self)
+						{
+							return Err
+							(
+								Error::new_spanned
+								(
+									receiver . ty . as_ref (),
+									"Containerized receivers are not supported"
+								)
+							);
+						}
+					}
+
 					methods . push (method . sig);
 				},
 				TraitItem::Type (associated_type) =>
@@ -253,7 +272,7 @@ impl From <ItemTrait> for TraitDefInfo
 			}
 		}
 
-		TraitDefInfo
+		let trait_def_info = TraitDefInfo
 		{
 			trait_info_kw: kw::trait_info::default (),
 
@@ -276,7 +295,9 @@ impl From <ItemTrait> for TraitDefInfo
 
 			c_brace: Brace::default (),
 			associated_constants
-		}
+		};
+
+		Ok (trait_def_info)
 	}
 }
 
@@ -293,7 +314,7 @@ fn try_forwardable_impl
 
 	let macro_ident = uncurry_macro_ident (&item_trait . ident);
 
-	let trait_def_info = TraitDefInfo::from (item_trait);
+	let trait_def_info = TraitDefInfo::try_from (item_trait)?;
 
 	let mut tokens = proc_macro2::TokenStream::from (item);
 	tokens . extend (gen_uncurry_macro (vis, macro_ident, trait_def_info));

@@ -40,17 +40,19 @@ where I: IntoIterator <Item = &'a Signature>
 
 			if let Some (FnArg::Receiver (receiver)) = inputs . first ()
 			{
-				match
-				(
-					receiver . reference . is_some (),
-					receiver . mutability . is_some ()
-				)
+				if receiver . ty == parse_quote! (&Self)
 				{
-					(false, false) => receiver_types . owned_self = true,
-					(false, true) => receiver_types . owned_self = true,
-					(true, false) => receiver_types . ref_self = true,
-					(true, true) => receiver_types . ref_mut_self = true
+					receiver_types . ref_self = true;
 				}
+				else if receiver . ty == parse_quote! (&mut Self)
+				{
+					receiver_types . ref_mut_self = true;
+				}
+				else if receiver . ty == parse_quote! (Self)
+				{
+					receiver_types . owned_self = true;
+				}
+				else { unreachable! (); }
 			}
 		}
 
@@ -130,29 +132,31 @@ fn try_forward_trait_via_conversion_core_impl (input: proc_macro::TokenStream)
 
 	let receiver_transforms = ReceiverTransforms
 	{
-		transform_ref: parse_quote!
+		transform_ref: |self_token| parse_quote!
 		(
-			<#base_type as std::borrow::Borrow <#delegated_type>>::borrow (self)
+			<#base_type as std::borrow::Borrow <#delegated_type>>
+				::borrow (#self_token)
 		),
-		transform_ref_mut: parse_quote!
+		transform_ref_mut: |self_token| parse_quote!
 		(
 			<#base_type as std::borrow::BorrowMut <#delegated_type>>
-				::borrow_mut (self)
+				::borrow_mut (#self_token)
 		),
-		transform_owned: parse_quote!
+		transform_owned: |self_token| parse_quote!
 		(
-			<#base_type as std::convert::Into <#delegated_type>>::into (self)
+			<#base_type as std::convert::Into <#delegated_type>>
+				::into (#self_token)
 		)
 	};
 
 	let tokens = gen_forwarded_trait
 	(
-		base_type,
+		&base_type,
 		type_info . parameters,
 		type_info . predicates,
-		forwarded_trait,
+		&forwarded_trait,
 		forwarded_trait_info,
-		delegated_type,
+		&delegated_type,
 		receiver_predicates,
 		receiver_transforms
 	);
