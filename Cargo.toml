@@ -1,0 +1,15 @@
+[package]
+name = "forward-traits"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+syn = {version = "2.0", features = ["full", "fold", "extra-traits"]}
+proc-macro2 = {version = "1.0"}
+quote = {version = "1.0"}
+syn_derive = {version = "0.1"}
+
+[lib]
+proc-macro = true
