@@ -36,7 +36,7 @@ where T: ToTokens
 		{
 			($receiver_path:path, $($receiver_args:tt)*) =>
 			{
-				$receiver_path! ($($receiver_args)*, #injected_data)
+				$receiver_path! ($($receiver_args)*, #injected_data);
 			}
 		}
 

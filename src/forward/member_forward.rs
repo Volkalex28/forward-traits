@@ -1,7 +1,6 @@
 use std::num::TryFromIntError;
 
 use syn::{Ident, Type, Path, Index, Token, parse_quote, parse};
-use syn::token::Paren;
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use syn_derive::{Parse, ToTokens};
@@ -210,10 +209,8 @@ struct MemberForwardInfo
 	dot: Token! [.],
 	member: Member,
 
-	#[syn (parenthesized)]
-	paren: Paren,
+	comma: Token! [,],
 
-	#[syn (in = paren)]
 	#[parse (Punctuated::parse_terminated)]
 	forwarded_traits: Punctuated <Path, Token! [,]>
 }
@@ -247,7 +244,7 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 				#base_type_ident,
 				#member,
 				#forwarded_trait
-			)
+			);
 		}
 			. to_tokens (&mut tokens);
 	}

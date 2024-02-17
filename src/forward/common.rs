@@ -134,13 +134,15 @@ fn gen_forwarded_method
 	let (impl_generics, type_generics, where_clause) =
 		generics . split_for_impl ();
 
+	let type_generics = type_generics . as_turbofish ();
+
 	quote!
 	{
-		fn #asyncness #ident #impl_generics (#inputs) -> #output
+		#asyncness fn #ident #impl_generics (#inputs) #output
 		#where_clause
 		{
 			<#delegated_type as #forwarded_trait>
-				::#ident::#type_generics (#(#args),*)
+				::#ident #type_generics (#(#args),*)
 		}
 	}
 }
@@ -227,7 +229,7 @@ pub fn gen_forwarded_trait
 
 	quote!
 	{
-		#[automatically_generated]
+		#[automatically_derived]
 		impl <#type_parameters> #forwarded_trait for #base_type
 		#where_clause
 		{
