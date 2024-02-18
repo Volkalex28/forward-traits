@@ -26,12 +26,10 @@ use super::TraitImplInfo;
 use crate::syntax::{TypedIdent, kw};
 use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
 
-#[derive (Clone, PartialEq, Eq, Hash, Parse, ToTokens)]
+#[derive (Parse, ToTokens)]
 pub struct TraitDefInfo
 {
 	trait_info_kw: kw::trait_info,
-
-	visibility: Visibility,
 
 	#[syn (parenthesized)]
 	p_paren: Paren,
@@ -97,7 +95,6 @@ impl TraitDefInfo
 			(
 				TraitImplInfo
 				{
-					visibility: self . visibility,
 					predicates: self . predicates,
 					associated_types: self . associated_types,
 					methods: self . methods,
@@ -202,7 +199,6 @@ impl TraitDefInfo
 		(
 			TraitImplInfo
 			{
-				visibility: self . visibility,
 				predicates,
 				associated_types,
 				methods,
@@ -218,8 +214,6 @@ impl TryFrom <ItemTrait> for TraitDefInfo
 
 	fn try_from (item_trait: ItemTrait) -> Result <TraitDefInfo>
 	{
-		let visibility = item_trait . vis;
-
 		let (parameters, default_values, mut predicates) =
 			parse_generics (item_trait . generics);
 
@@ -280,8 +274,6 @@ impl TryFrom <ItemTrait> for TraitDefInfo
 		let trait_def_info = TraitDefInfo
 		{
 			trait_info_kw: kw::trait_info::default (),
-
-			visibility,
 
 			p_paren: Paren::default (),
 			parameters,
