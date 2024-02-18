@@ -1,11 +1,13 @@
 use syn
 ::{
+	Attribute,
 	Visibility,
 	Ident,
 	Signature,
 	WherePredicate,
 	ItemTrait,
 	TraitItem,
+	ItemUse,
 	Token,
 	parse_quote,
 	parse
@@ -13,10 +15,13 @@ use syn
 use syn::token::{Paren, Brace, Bracket};
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
+use syn::fold::Fold;
 use syn_derive::{Parse, ToTokens};
+use quote::ToTokens;
 
 use super::generics::{ParameterInfo, ParameterValue, parse_generics};
 use super::partial_eval::PartialEval;
+use super::transform_use::TransformUse;
 use super::TraitImplInfo;
 use crate::syntax::{TypedIdent, kw};
 use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
@@ -301,6 +306,24 @@ impl TryFrom <ItemTrait> for TraitDefInfo
 	}
 }
 
+#[derive (Parse)]
+#[parse (
+	prefix = |parse_stream|
+	{
+		Attribute::parse_outer (parse_stream)?;
+		parse_stream . parse::<Visibility> ()?;
+		Ok (())
+	}
+)]
+enum ForwardableItem
+{
+	#[parse (peek = Token! [trait])]
+	ItemTrait (ItemTrait),
+
+	#[parse (peek = Token! [use])]
+	ItemUse (ItemUse)
+}
+
 fn try_forwardable_impl
 (
 	_attr: proc_macro::TokenStream,
@@ -308,16 +331,25 @@ fn try_forwardable_impl
 )
 -> Result <proc_macro2::TokenStream>
 {
-	let item_trait: ItemTrait = parse (item . clone ())?;
+	let mut tokens = proc_macro2::TokenStream::from (item . clone ());
 
-	let vis = item_trait . vis . clone ();
+	match parse (item)?
+	{
+		ForwardableItem::ItemTrait (item_trait) =>
+		{
+			let vis = item_trait . vis . clone ();
 
-	let macro_ident = uncurry_macro_ident (&item_trait . ident);
+			let macro_ident = uncurry_macro_ident (&item_trait . ident);
 
-	let trait_def_info = TraitDefInfo::try_from (item_trait)?;
+			let trait_def_info = TraitDefInfo::try_from (item_trait)?;
 
-	let mut tokens = proc_macro2::TokenStream::from (item);
-	tokens . extend (gen_uncurry_macro (vis, macro_ident, trait_def_info));
+			tokens . extend (gen_uncurry_macro (vis, macro_ident, trait_def_info));
+		},
+		ForwardableItem::ItemUse (item_use) =>
+		{
+			TransformUse {} . fold_item_use (item_use) . to_tokens (&mut tokens);
+		}
+	}
 
 	Ok (tokens)
 }

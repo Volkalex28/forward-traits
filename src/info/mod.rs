@@ -1,5 +1,6 @@
 pub mod generics;
 mod partial_eval;
+mod transform_use;
 
 mod trait_def_info;
 mod trait_impl_info;
