@@ -19,7 +19,6 @@ use quote::{quote, ToTokens};
 use crate::syntax::TypedIdent;
 use crate::info::generics::{ParameterInfo, ParameterValue};
 use crate::info::TraitImplInfo;
-use crate::uncurry::uncurry_macro_ident;
 
 pub struct ReceiverTransforms <FR, FM, FO>
 where
@@ -58,29 +57,6 @@ pub fn get_trait_parameter_values (forwarded_trait: &Path)
 	}
 
 	Ok (parameter_values)
-}
-
-fn get_trait_ident (trait_path: &Path) -> Result <Ident>
-{
-	match trait_path . segments . last ()
-	{
-		None => Err
-		(
-			Error::new_spanned (trait_path, "Path to trait must be nonempty")
-		),
-		Some (segment) => Ok (segment . ident . clone ())
-	}
-}
-
-pub fn get_trait_macro_path (trait_path: &Path) -> Result <Path>
-{
-	let trait_ident = get_trait_ident (trait_path)?;
-	let trait_macro_ident = uncurry_macro_ident (&trait_ident);
-	let mut trait_macro_path = trait_path . clone ();
-	trait_macro_path . segments . pop ();
-	trait_macro_path . segments . push_value (parse_quote! (#trait_macro_ident));
-
-	Ok (trait_macro_path)
 }
 
 fn gen_forwarded_associated_type

@@ -1,9 +1,33 @@
-use syn::{Attribute, Visibility, Ident, parse_quote};
+use syn::{Attribute, Visibility, Path, Ident, parse_quote};
+use syn::parse::{Result, Error};
 use quote::{quote, ToTokens, format_ident};
 
 pub fn uncurry_macro_ident (base_info_ident: &Ident) -> Ident
 {
 	format_ident! ("uncurry_trait_forwarding_info_for_{}", base_info_ident)
+}
+
+pub fn get_trait_ident (trait_path: &Path) -> Result <Ident>
+{
+	match trait_path . segments . last ()
+	{
+		None => Err
+		(
+			Error::new_spanned (trait_path, "Path to trait must be nonempty")
+		),
+		Some (segment) => Ok (segment . ident . clone ())
+	}
+}
+
+pub fn get_trait_macro_path (trait_path: &Path) -> Result <Path>
+{
+	let trait_ident = get_trait_ident (trait_path)?;
+	let trait_macro_ident = uncurry_macro_ident (&trait_ident);
+	let mut trait_macro_path = trait_path . clone ();
+	trait_macro_path . segments . pop ();
+	trait_macro_path . segments . push_value (parse_quote! (#trait_macro_ident));
+
+	Ok (trait_macro_path)
 }
 
 fn mangle_ident (ident: &Ident) -> Ident
