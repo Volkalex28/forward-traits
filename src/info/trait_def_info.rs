@@ -59,7 +59,7 @@ pub struct TraitDefInfo
 	m_brace: Brace,
 	#[syn (in = m_brace)]
 	#[parse (Punctuated::parse_terminated)]
-	methods: Punctuated <Signature, Token! [,]>,
+	methods: Punctuated <Signature, Token! [;]>,
 
 	#[syn (braced)]
 	c_brace: Brace,

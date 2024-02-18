@@ -64,7 +64,7 @@ impl PartialEval
 	fn_fold_punctuated! (fold_parameter_values, ParameterValue, Token! [,], fold_parameter_value);
 	fn_fold_punctuated! (fold_predicates, WherePredicate, Token! [,], fold_where_predicate);
 
-	fn_fold_punctuated! (fold_methods, Signature, Token! [,], fold_signature);
+	fn_fold_punctuated! (fold_methods, Signature, Token! [;], fold_signature);
 	fn_fold_punctuated! (fold_associated_constants, TypedIdent, Token! [,], fold_typed_ident);
 }
 
