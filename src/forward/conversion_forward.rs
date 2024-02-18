@@ -211,7 +211,7 @@ fn try_forward_traits_via_conversion_impl (input: proc_macro::TokenStream)
 			#base_type_macro_ident!
 			(
 				#forwarded_trait_macro_path,
-				forward_traits::forward_trait_via_conversion,
+				forward_traits::__forward_trait_via_conversion,
 				#base_type_ident,
 				#delegated_type,
 				#forwarded_trait

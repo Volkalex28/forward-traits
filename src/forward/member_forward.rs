@@ -245,7 +245,7 @@ fn try_forward_traits_via_member_impl (input: proc_macro::TokenStream)
 			#base_type_macro_ident!
 			(
 				#forwarded_trait_macro_path,
-				forward_traits::forward_trait_via_member,
+				forward_traits::__forward_trait_via_member,
 				#base_type_ident,
 				#member,
 				#forwarded_trait
