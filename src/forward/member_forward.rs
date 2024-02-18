@@ -10,7 +10,6 @@ use super::common
 ::{
 	ReceiverTransforms,
 	get_trait_parameter_values,
-	get_trait_macro_path,
 	gen_forwarded_trait
 };
 use crate::syntax::TypedIdent;
@@ -22,7 +21,7 @@ use crate::info
 	MemberInfoStruct,
 	MemberInfoTupleStruct
 };
-use crate::uncurry::uncurry_macro_ident;
+use crate::uncurry::{get_trait_macro_path, uncurry_macro_ident};
 
 #[derive (Parse, ToTokens)]
 enum Member
@@ -88,7 +87,7 @@ fn get_member_index_type
 }
 
 #[derive (Parse)]
-struct ForwardTraitViaMemberCore
+struct ForwardTraitViaMember
 {
 	base_type_ident: Ident,
 	_bt_comma: Token! [,],
@@ -105,10 +104,10 @@ struct ForwardTraitViaMemberCore
 	forwarded_trait_info: TraitDefInfo
 }
 
-fn try_forward_trait_via_member_core_impl (input: proc_macro::TokenStream)
+fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let ForwardTraitViaMemberCore
+	let ForwardTraitViaMember
 	{
 		base_type_ident,
 		member,
@@ -200,16 +199,16 @@ fn try_forward_trait_via_member_core_impl (input: proc_macro::TokenStream)
 	}
 }
 
-pub fn forward_trait_via_member_core_impl (input: proc_macro::TokenStream)
+pub fn forward_trait_via_member_impl (input: proc_macro::TokenStream)
 -> proc_macro::TokenStream
 {
-	try_forward_trait_via_member_core_impl (input)
+	try_forward_trait_via_member_impl (input)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }
 
 #[derive (Parse, ToTokens)]
-struct MemberForwardInfo
+struct ForwardTraitsViaMember
 {
 	base_type_ident: Ident,
 	dot: Token! [.],
@@ -221,10 +220,10 @@ struct MemberForwardInfo
 	forwarded_traits: Punctuated <Path, Token! [,]>
 }
 
-fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
+fn try_forward_traits_via_member_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let MemberForwardInfo
+	let ForwardTraitsViaMember
 	{
 		base_type_ident,
 		member,
@@ -246,7 +245,7 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 			#base_type_macro_ident!
 			(
 				#forwarded_trait_macro_path,
-				forward_traits::forward_trait_via_member_core,
+				forward_traits::forward_trait_via_member,
 				#base_type_ident,
 				#member,
 				#forwarded_trait
@@ -258,10 +257,10 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 	Ok (tokens)
 }
 
-pub fn forward_trait_via_member_impl (input: proc_macro::TokenStream)
+pub fn forward_traits_via_member_impl (input: proc_macro::TokenStream)
 -> proc_macro::TokenStream
 {
-	try_forward_trait_via_member_impl (input)
+	try_forward_traits_via_member_impl (input)
 		. unwrap_or_else (Error::into_compile_error)
 		. into ()
 }
