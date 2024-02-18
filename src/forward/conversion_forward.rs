@@ -163,7 +163,7 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 	Ok (tokens)
 }
 
-pub fn forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
+pub fn __forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 -> proc_macro::TokenStream
 {
 	try_forward_trait_via_conversion_impl (input)
