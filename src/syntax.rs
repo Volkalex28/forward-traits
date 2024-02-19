@@ -1,5 +1,6 @@
 use syn::{Ident, Type, Token};
 use syn_derive::{Parse, ToTokens};
+use quote::format_ident;
 
 pub mod kw
 {
@@ -25,4 +26,9 @@ impl TypedIdent
 	{
 		Self {ident, colon: <Token! [:]>::default (), ty}
 	}
+}
+
+pub fn mangle_ident (ident: &Ident) -> Ident
+{
+	format_ident! ("__{}__", ident)
 }

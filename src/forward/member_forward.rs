@@ -1,8 +1,9 @@
 use std::num::TryFromIntError;
 
-use syn::{Ident, Type, Path, Index, Token, parse_quote, parse};
+use syn::{Ident, Type, Path, Index, Signature, ReturnType, Token, parse_quote, parse};
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
+use syn::fold::Fold;
 use syn_derive::{Parse, ToTokens};
 use quote::{quote, ToTokens};
 
@@ -86,6 +87,28 @@ fn get_member_index_type
 	Ok ((member_index, member_type))
 }
 
+fn validate_method_return_types <'a, I> (methods: I) -> Result <()>
+where I: IntoIterator <Item = &'a Signature>
+{
+	for method_signature in methods
+	{
+		match method_signature . output
+		{
+			ReturnType::Type (_, ref boxed_ty) if **boxed_ty == parse_quote! (Self) => return Err
+			(
+				Error::new_spanned
+				(
+					boxed_ty,
+					"Member forwards cannot convert from delegated type to Self"
+				)
+			),
+			_ => {}
+		}
+	}
+
+	Ok (())
+}
+
 #[derive (Parse)]
 struct ForwardTraitViaMember
 {
@@ -118,6 +141,9 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 	}
 		= parse (input)?;
 
+	let (type_info, mut partial_eval) = type_info . into_mangled ();
+	let forwarded_trait = partial_eval . fold_path (forwarded_trait);
+
 	let base_type_parameters = &type_info . parameters;
 	let base_type = parse_quote! (#base_type_ident <#base_type_parameters>);
 
@@ -125,6 +151,8 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 
 	let forwarded_trait_info =
 		forwarded_trait_info . substitute (trait_parameter_values)?;
+
+	validate_method_return_types (&forwarded_trait_info . methods)?;
 
 	match type_info . member_info
 	{
@@ -140,13 +168,12 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 
 			let receiver_transforms = ReceiverTransforms
 			{
-				transform_ref:
-					|self_token| parse_quote! (&#self_token . #member_ident),
-				transform_ref_mut:
-					|self_token| parse_quote! (&mut #self_token . #member_ident),
-				transform_owned:
-					|self_token| parse_quote! (#self_token . #member_ident)
+				transform_ref: |expr| quote! (&#expr . #member_ident),
+				transform_ref_mut: |expr| quote! (&mut #expr . #member_ident),
+				transform_owned: |expr| quote! (#expr . #member_ident)
 			};
+
+			let return_transform = |expr| expr;
 
 			let tokens = gen_forwarded_trait
 			(
@@ -157,7 +184,8 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 				forwarded_trait_info,
 				&member_type,
 				receiver_predicates,
-				receiver_transforms
+				receiver_transforms,
+				return_transform
 			);
 
 			Ok (tokens)
@@ -174,13 +202,12 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 
 			let receiver_transforms = ReceiverTransforms
 			{
-				transform_ref:
-					|self_token| parse_quote! (&#self_token . #member_index),
-				transform_ref_mut:
-					|self_token| parse_quote! (&mut #self_token . #member_index),
-				transform_owned:
-					|self_token| parse_quote! (#self_token . #member_index)
+				transform_ref: |expr| quote! (&#expr . #member_index),
+				transform_ref_mut: |expr| quote! (&mut #expr . #member_index),
+				transform_owned: |expr| quote! (#expr . #member_index)
 			};
+
+			let return_transform = |expr| expr;
 
 			let tokens = gen_forwarded_trait
 			(
@@ -191,7 +218,8 @@ fn try_forward_trait_via_member_impl (input: proc_macro::TokenStream)
 				forwarded_trait_info,
 				&member_type,
 				receiver_predicates,
-				receiver_transforms
+				receiver_transforms,
+				return_transform
 			);
 
 			Ok (tokens)

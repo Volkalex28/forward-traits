@@ -1,12 +1,12 @@
-use syn::{Ident, Signature, WherePredicate, Token};
+use syn::{Signature, WherePredicate, Token};
 use syn::punctuated::Punctuated;
 
-use crate::syntax::TypedIdent;
+use super::{TraitAssociatedTypeInfo, TraitAssociatedConstInfo};
 
 pub struct TraitImplInfo
 {
 	pub predicates: Punctuated <WherePredicate, Token! [,]>,
-	pub associated_types: Punctuated <Ident, Token! [,]>,
+	pub associated_types: Punctuated <TraitAssociatedTypeInfo, Token! [;]>,
 	pub methods: Punctuated <Signature, Token! [;]>,
-	pub associated_constants: Punctuated <TypedIdent, Token! [,]>
+	pub associated_constants: Punctuated <TraitAssociatedConstInfo, Token! [;]>
 }

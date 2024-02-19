@@ -3,18 +3,23 @@ use syn
 	Attribute,
 	Visibility,
 	Ident,
+	Type,
 	Signature,
+	Generics,
 	WherePredicate,
 	ItemTrait,
 	TraitItem,
+	TraitItemType,
+	TraitItemConst,
 	ItemUse,
 	Token,
 	parse_quote,
 	parse
 };
+use syn::ext::IdentExt;
 use syn::token::{Paren, Brace, Bracket};
 use syn::punctuated::Punctuated;
-use syn::parse::{Result, Error};
+use syn::parse::{Parse, ParseStream, Result, Error};
 use syn::fold::Fold;
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
@@ -23,8 +28,107 @@ use super::generics::{ParameterInfo, ParameterValue, parse_generics};
 use super::partial_eval::PartialEval;
 use super::transform_use::TransformUse;
 use super::TraitImplInfo;
-use crate::syntax::{TypedIdent, kw};
+use crate::syntax::kw;
 use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
+
+pub struct TraitAssociatedTypeInfo
+{
+	pub type_token: Token! [type],
+	pub ident: Ident,
+	pub generics: Generics
+}
+
+impl Parse for TraitAssociatedTypeInfo
+{
+	fn parse (input: ParseStream <'_>) -> Result <Self>
+	{
+		let type_token = input . parse ()?;
+		let ident = input . parse ()?;
+		let mut generics: Generics = input . parse ()?;
+		generics . where_clause = input . parse ()?;
+
+		Ok (Self {type_token, ident, generics})
+	}
+}
+
+impl ToTokens for TraitAssociatedTypeInfo
+{
+	fn to_tokens (&self, tokens: &mut proc_macro2::TokenStream)
+	{
+		self . type_token . to_tokens (tokens);
+		self . ident . to_tokens (tokens);
+		self . generics . to_tokens (tokens);
+		self . generics . where_clause . to_tokens (tokens);
+	}
+}
+
+impl From <TraitItemType> for TraitAssociatedTypeInfo
+{
+	fn from (item_type: TraitItemType) -> Self
+	{
+		let TraitItemType {type_token, ident, generics, ..} = item_type;
+
+		Self {type_token, ident, generics}
+	}
+}
+
+pub struct TraitAssociatedConstInfo
+{
+	pub const_token: Token! [const],
+	pub ident: Ident,
+	pub generics: Generics,
+	pub colon_token: Token! [:],
+	pub ty: Type
+}
+
+impl Parse for TraitAssociatedConstInfo
+{
+	fn parse (input: ParseStream <'_>) -> Result <Self>
+	{
+		let const_token = input . parse ()?;
+
+		let lookahead = input . lookahead1 ();
+		let ident = if lookahead . peek (Ident) || lookahead . peek (Token! [_])
+		{
+			Ident::parse_any (input)?
+		}
+		else
+		{
+			return Err (lookahead . error ());
+		};
+
+		let mut generics: Generics = input . parse ()?;
+		let colon_token = input . parse ()?;
+		let ty = input . parse ()?;
+		generics . where_clause = input . parse ()?;
+
+		Ok (Self {const_token, ident, generics, colon_token, ty})
+	}
+}
+
+impl ToTokens for TraitAssociatedConstInfo
+{
+	fn to_tokens (&self, tokens: &mut proc_macro2::TokenStream)
+	{
+		self . const_token . to_tokens (tokens);
+		self . ident . to_tokens (tokens);
+		self . generics . to_tokens (tokens);
+		self . colon_token . to_tokens (tokens);
+		self . ty . to_tokens (tokens);
+		self . generics . where_clause . to_tokens (tokens);
+	}
+}
+
+impl From <TraitItemConst> for TraitAssociatedConstInfo
+{
+	fn from (item_const: TraitItemConst) -> Self
+	{
+		let TraitItemConst {const_token, ident, generics, colon_token, ty, ..}
+			= item_const;
+
+		Self {const_token, ident, generics, colon_token, ty}
+	}
+}
 
 #[derive (Parse, ToTokens)]
 pub struct TraitDefInfo
@@ -53,7 +157,7 @@ pub struct TraitDefInfo
 	t_brace: Brace,
 	#[syn (in = t_brace)]
 	#[parse (Punctuated::parse_terminated)]
-	associated_types: Punctuated <Ident, Token! [,]>,
+	associated_types: Punctuated <TraitAssociatedTypeInfo, Token! [;]>,
 
 	#[syn (braced)]
 	m_brace: Brace,
@@ -65,7 +169,7 @@ pub struct TraitDefInfo
 	c_brace: Brace,
 	#[syn (in = c_brace)]
 	#[parse (Punctuated::parse_terminated)]
-	associated_constants: Punctuated <TypedIdent, Token! [,]>
+	associated_constants: Punctuated <TraitAssociatedConstInfo, Token! [;]>
 }
 
 impl TraitDefInfo
@@ -190,7 +294,8 @@ impl TraitDefInfo
 		};
 
 		let predicates = p_eval . fold_predicates (self . predicates);
-		let associated_types = self . associated_types;
+		let associated_types =
+			p_eval . fold_associated_types (self . associated_types);
 		let methods = p_eval . fold_methods (self . methods);
 		let associated_constants =
 			p_eval . fold_associated_constants (self . associated_constants);
@@ -231,15 +336,11 @@ impl TryFrom <ItemTrait> for TraitDefInfo
 		{
 			match item
 			{
-				TraitItem::Const (associated_constant) =>
+				TraitItem::Type (associated_type) =>
 				{
-					associated_constants . push
+					associated_types . push
 					(
-						TypedIdent::new
-						(
-							associated_constant . ident,
-							associated_constant . ty
-						)
+						TraitAssociatedTypeInfo::from (associated_type)
 					);
 				},
 				TraitItem::Fn (method) =>
@@ -263,9 +364,12 @@ impl TryFrom <ItemTrait> for TraitDefInfo
 
 					methods . push (method . sig);
 				},
-				TraitItem::Type (associated_type) =>
+				TraitItem::Const (associated_constant) =>
 				{
-					associated_types . push (associated_type . ident);
+					associated_constants . push
+					(
+						TraitAssociatedConstInfo::from (associated_constant)
+					);
 				},
 				_ => {}
 			}

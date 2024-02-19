@@ -16,7 +16,14 @@ use syn::punctuated::Punctuated;
 use syn::fold::{Fold, fold_lifetime, fold_type, fold_path, fold_expr};
 
 use super::generics::{ParameterInfo, ParameterValue};
-
+use super
+::{
+	TraitAssociatedTypeInfo,
+	TraitAssociatedConstInfo,
+	MemberInfo,
+	MemberInfoStruct,
+	MemberInfoTupleStruct
+};
 use crate::syntax::TypedIdent;
 
 pub struct PartialEval
@@ -38,6 +45,16 @@ macro_rules! fn_fold_punctuated
 
 impl PartialEval
 {
+	fn fold_typed_ident (&mut self, node: TypedIdent) -> TypedIdent
+	{
+		TypedIdent
+		{
+			ident: node . ident,
+			colon: node . colon,
+			ty: self . fold_type (node . ty)
+		}
+	}
+
 	pub fn fold_parameter_value (&mut self, node: ParameterValue) -> ParameterValue
 	{
 		match node
@@ -51,21 +68,71 @@ impl PartialEval
 		}
 	}
 
-	pub fn fold_typed_ident (&mut self, node: TypedIdent) -> TypedIdent
+	pub fn fold_associated_type (&mut self, node: TraitAssociatedTypeInfo)
+	-> TraitAssociatedTypeInfo
 	{
-		TypedIdent
+		TraitAssociatedTypeInfo
 		{
+			type_token: node . type_token,
 			ident: node . ident,
-			colon: node . colon,
+			generics: self . fold_generics (node . generics)
+		}
+	}
+
+	pub fn fold_associated_constant (&mut self, node: TraitAssociatedConstInfo)
+	-> TraitAssociatedConstInfo
+	{
+		TraitAssociatedConstInfo
+		{
+			const_token: node . const_token,
+			ident: node . ident,
+			generics: self . fold_generics (node . generics),
+			colon_token: node . colon_token,
 			ty: self . fold_type (node . ty)
+		}
+	}
+
+	pub fn fold_member_info (&mut self, node: MemberInfo) -> MemberInfo
+	{
+		match node
+		{
+			MemberInfo::Struct (member_info_struct) =>
+				MemberInfo::Struct (self . fold_member_info_struct (member_info_struct)),
+			MemberInfo::TupleStruct (member_info_tuple_struct) =>
+				MemberInfo::TupleStruct (self . fold_member_info_tuple_struct (member_info_tuple_struct))
+		}
+	}
+
+	pub fn fold_member_info_struct (&mut self, node: MemberInfoStruct) -> MemberInfoStruct
+	{
+		MemberInfoStruct
+		{
+			struct_kw: node . struct_kw,
+			brace: node . brace,
+			members: self . fold_struct_members (node . members)
+		}
+	}
+
+	pub fn fold_member_info_tuple_struct (&mut self, node: MemberInfoTupleStruct)
+	-> MemberInfoTupleStruct
+	{
+		MemberInfoTupleStruct
+		{
+			tuple_struct_kw: node . tuple_struct_kw,
+			paren: node . paren,
+			members: self . fold_tuple_struct_members (node . members)
 		}
 	}
 
 	fn_fold_punctuated! (fold_parameter_values, ParameterValue, Token! [,], fold_parameter_value);
 	fn_fold_punctuated! (fold_predicates, WherePredicate, Token! [,], fold_where_predicate);
 
+	fn_fold_punctuated! (fold_struct_members, TypedIdent, Token! [,], fold_typed_ident);
+	fn_fold_punctuated! (fold_tuple_struct_members, Type, Token! [,], fold_type);
+
+	fn_fold_punctuated! (fold_associated_types, TraitAssociatedTypeInfo, Token! [;], fold_associated_type);
 	fn_fold_punctuated! (fold_methods, Signature, Token! [;], fold_signature);
-	fn_fold_punctuated! (fold_associated_constants, TypedIdent, Token! [,], fold_typed_ident);
+	fn_fold_punctuated! (fold_associated_constants, TraitAssociatedConstInfo, Token! [;], fold_associated_constant);
 }
 
 impl Fold for PartialEval
@@ -92,7 +159,7 @@ impl Fold for PartialEval
 					if let Some (ParameterValue::Type (ty)) =
 						self . parameters . get
 						(
-							&ParameterInfo::TypeOrConst (ident . clone ())
+							&ParameterInfo::Type (ident . clone ())
 						)
 					{
 						return ty . clone ();
@@ -122,7 +189,7 @@ impl Fold for PartialEval
 
 		let ty = match self
 			. parameters
-			. get (&ParameterInfo::TypeOrConst (first_segment . ident . clone ()))
+			. get (&ParameterInfo::Type (first_segment . ident . clone ()))
 		{
 			Some (ParameterValue::Type (ty)) => ty,
 			_ => return fold_path (self, node),
@@ -151,7 +218,11 @@ impl Fold for PartialEval
 					if let Some (ParameterValue::Const (expr)) =
 						self . parameters . get
 						(
-							&ParameterInfo::TypeOrConst (ident . clone ())
+							&ParameterInfo::Const
+							(
+								<Token! [const]>::default (),
+								ident . clone ()
+							)
 						)
 					{
 						return expr . clone ();

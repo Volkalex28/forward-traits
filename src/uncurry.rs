@@ -2,6 +2,8 @@ use syn::{Attribute, Visibility, Path, Ident, parse_quote};
 use syn::parse::{Result, Error};
 use quote::{quote, ToTokens, format_ident};
 
+use crate::syntax::mangle_ident;
+
 pub fn uncurry_macro_ident (base_info_ident: &Ident) -> Ident
 {
 	format_ident! ("uncurry_trait_forwarding_info_for_{}", base_info_ident)
@@ -28,11 +30,6 @@ pub fn get_trait_macro_path (trait_path: &Path) -> Result <Path>
 	trait_macro_path . segments . push_value (parse_quote! (#trait_macro_ident));
 
 	Ok (trait_macro_path)
-}
-
-fn mangle_ident (ident: &Ident) -> Ident
-{
-	format_ident! ("__{}__", ident)
 }
 
 pub fn gen_uncurry_macro <T>

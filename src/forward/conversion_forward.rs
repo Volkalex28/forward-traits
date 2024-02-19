@@ -1,7 +1,18 @@
-use syn::{Ident, Type, Path, Signature, FnArg, Token, parse_quote, parse};
-use syn::token::Paren;
+use syn
+::{
+	Ident,
+	Type,
+	Path,
+	Signature,
+	FnArg,
+	ReturnType,
+	Token,
+	parse_quote,
+	parse
+};
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
+use syn::fold::Fold;
 use syn_derive::{Parse, ToTokens};
 use quote::{quote, ToTokens};
 
@@ -14,48 +25,57 @@ use super::common
 use crate::info::{TraitDefInfo, TypeInfo};
 use crate::uncurry::{get_trait_macro_path, uncurry_macro_ident};
 
-struct TraitReceiverTypes
+struct TransformTypes
 {
-	ref_self: bool,
-	ref_mut_self: bool,
-	owned_self: bool
+	ref_self_to_ref_delegated: bool,
+	ref_mut_self_to_ref_mut_delegated: bool,
+	owned_self_to_owned_delegated: bool,
+	owned_delegated_to_owned_self: bool
 }
 
-impl <'a, I> From <I> for TraitReceiverTypes
+impl <'a, I> From <I> for TransformTypes
 where I: IntoIterator <Item = &'a Signature>
 {
-	fn from (methods: I) -> TraitReceiverTypes
+	fn from (methods: I) -> TransformTypes
 	{
-		let mut receiver_types = TraitReceiverTypes
+		let mut transform_types = TransformTypes
 		{
-			ref_self: false,
-			ref_mut_self: false,
-			owned_self: false
+			ref_self_to_ref_delegated: false,
+			ref_mut_self_to_ref_mut_delegated: false,
+			owned_self_to_owned_delegated: false,
+			owned_delegated_to_owned_self: false
 		};
 
 		for method_signature in methods
 		{
-			let Signature {inputs, ..} = method_signature;
+			let Signature {inputs, output, ..} = method_signature;
 
 			if let Some (FnArg::Receiver (receiver)) = inputs . first ()
 			{
 				if receiver . ty == parse_quote! (&Self)
 				{
-					receiver_types . ref_self = true;
+					transform_types . ref_self_to_ref_delegated = true;
 				}
 				else if receiver . ty == parse_quote! (&mut Self)
 				{
-					receiver_types . ref_mut_self = true;
+					transform_types . ref_mut_self_to_ref_mut_delegated = true;
 				}
 				else if receiver . ty == parse_quote! (Self)
 				{
-					receiver_types . owned_self = true;
+					transform_types . owned_self_to_owned_delegated = true;
 				}
-				else { unreachable! (); }
+			}
+
+			match output
+			{
+				ReturnType::Type (_, ref boxed_ty)
+					if **boxed_ty == parse_quote! (Self) =>
+					transform_types . owned_delegated_to_owned_self = true,
+				_ => {}
 			}
 		}
 
-		receiver_types
+		transform_types
 	}
 }
 
@@ -91,6 +111,10 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 	}
 		= parse (input)?;
 
+	let (type_info, mut partial_eval) = type_info . into_mangled ();
+	let delegated_type = partial_eval . fold_type (delegated_type);
+	let forwarded_trait = partial_eval . fold_path (forwarded_trait);
+
 	let base_type_parameters = &type_info . parameters;
 	let base_type = parse_quote! (#base_type_ident <#base_type_parameters>);
 
@@ -99,13 +123,13 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 	let forwarded_trait_info =
 		forwarded_trait_info . substitute (trait_parameter_values)?;
 
-	let trait_receiver_types =
-		TraitReceiverTypes::from (&forwarded_trait_info . methods);
+	let trait_transform_types =
+		TransformTypes::from (&forwarded_trait_info . methods);
 
 	let mut receiver_predicates = Vec::new ();
 	receiver_predicates . push (parse_quote! (#delegated_type: #forwarded_trait));
 
-	if trait_receiver_types . ref_self
+	if trait_transform_types . ref_self_to_ref_delegated
 	{
 		receiver_predicates . push
 		(
@@ -113,7 +137,7 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 		);
 	}
 
-	if trait_receiver_types . ref_mut_self
+	if trait_transform_types . ref_mut_self_to_ref_mut_delegated
 	{
 		receiver_predicates . push
 		(
@@ -121,7 +145,7 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 		);
 	}
 
-	if trait_receiver_types . owned_self
+	if trait_transform_types . owned_self_to_owned_delegated
 	{
 		receiver_predicates . push
 		(
@@ -129,24 +153,34 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 		);
 	}
 
+	if trait_transform_types . owned_delegated_to_owned_self
+	{
+		receiver_predicates . push
+		(
+			parse_quote! (#base_type: std::convert::From <#delegated_type>)
+		);
+	}
+
 	let receiver_transforms = ReceiverTransforms
 	{
-		transform_ref: |self_token| parse_quote!
+		transform_ref: |expr| quote!
 		(
-			<#base_type as std::borrow::Borrow <#delegated_type>>
-				::borrow (#self_token)
+			<#base_type as std::borrow::Borrow <#delegated_type>>::borrow (#expr)
 		),
-		transform_ref_mut: |self_token| parse_quote!
+		transform_ref_mut: |expr| quote!
 		(
-			<#base_type as std::borrow::BorrowMut <#delegated_type>>
-				::borrow_mut (#self_token)
+			<#base_type as std::borrow::BorrowMut <#delegated_type>>::borrow_mut (#expr)
 		),
-		transform_owned: |self_token| parse_quote!
+		transform_owned: |expr| quote!
 		(
-			<#base_type as std::convert::Into <#delegated_type>>
-				::into (#self_token)
+			<#base_type as std::convert::Into <#delegated_type>>::into (#expr)
 		)
 	};
+
+	let return_transform = |expr| quote!
+	(
+		<#base_type as std::convert::From <#delegated_type>>::from (#expr)
+	);
 
 	let tokens = gen_forwarded_trait
 	(
@@ -157,7 +191,8 @@ fn try_forward_trait_via_conversion_impl (input: proc_macro::TokenStream)
 		forwarded_trait_info,
 		&delegated_type,
 		receiver_predicates,
-		receiver_transforms
+		receiver_transforms,
+		return_transform
 	);
 
 	Ok (tokens)
@@ -178,10 +213,8 @@ struct ForwardTraitsViaConversion
 	r_arrow: Token! [->],
 	delegated_type: Type,
 
-	#[syn (parenthesized)]
-	paren: Paren,
+	comma: Token! [,],
 
-	#[syn (in = paren)]
 	#[parse (Punctuated::parse_terminated)]
 	forwarded_traits: Punctuated <Path, Token! [,]>
 }

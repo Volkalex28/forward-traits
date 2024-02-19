@@ -7,7 +7,13 @@ mod trait_impl_info;
 mod type_info;
 mod supply_trait_info;
 
-pub use trait_def_info::{TraitDefInfo, forwardable_impl};
+pub use trait_def_info
+::{
+	TraitDefInfo,
+	TraitAssociatedTypeInfo,
+	TraitAssociatedConstInfo,
+	forwardable_impl
+};
 pub use trait_impl_info::TraitImplInfo;
 pub use type_info
 ::{

@@ -13,7 +13,8 @@ use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use syn_derive::{Parse, ToTokens};
 
-use super::generics::{ParameterInfo, parse_generics};
+use super::generics::{ParameterInfo, ParameterValue, parse_generics};
+use super::partial_eval::PartialEval;
 use crate::syntax::{TypedIdent, kw};
 use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
 
@@ -143,6 +144,44 @@ impl TypeInfo
 				member_info
 			}
 		)
+	}
+
+	pub fn into_mangled (self) -> (Self, PartialEval)
+	{
+		let mangled_parameters: Punctuated <ParameterInfo, Token! [,]> = self
+			. parameters
+			. iter ()
+			. map (|parameter| parameter . to_mangled ())
+			. collect ();
+
+		let mangled_values: Punctuated <ParameterValue, Token! [,]> = mangled_parameters
+			. iter ()
+			. map (|parameter| ParameterValue::from (parameter))
+			. collect ();
+
+		let mut partial_eval = PartialEval
+		{
+			parameters: self
+				. parameters
+				. into_iter ()
+				. zip (mangled_values)
+				. collect ()
+		};
+
+		let type_info = TypeInfo
+		{
+			type_info_kw: self . type_info_kw,
+
+			p_paren: self . p_paren,
+			parameters: mangled_parameters,
+
+			p_bracket: self . p_bracket,
+			predicates: partial_eval . fold_predicates (self . predicates),
+
+			member_info: partial_eval . fold_member_info (self . member_info)
+		};
+
+		(type_info, partial_eval)
 	}
 }
 

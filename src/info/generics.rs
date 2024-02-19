@@ -15,6 +15,8 @@ use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use syn_derive::{Parse, ToTokens};
 
+use crate::syntax::mangle_ident;
+
 #[derive (Clone, PartialEq, Eq, Hash, Parse, ToTokens)]
 pub enum ParameterInfo
 {
@@ -22,7 +24,32 @@ pub enum ParameterInfo
 	Lifetime (Lifetime),
 
 	#[parse (peek = Ident)]
-	TypeOrConst (Ident)
+	Type (Ident),
+
+	#[parse (peek = Token! [const])]
+	Const (Token! [const], Ident)
+}
+
+impl ParameterInfo
+{
+	pub fn to_mangled (&self) -> Self
+	{
+		match self
+		{
+			ParameterInfo::Lifetime (lifetime) => ParameterInfo::Lifetime
+			(
+				Lifetime
+				{
+					apostrophe: lifetime . apostrophe . clone (),
+					ident: mangle_ident (&lifetime . ident)
+				}
+			),
+			ParameterInfo::Type (ident) =>
+				ParameterInfo::Type (mangle_ident (ident)),
+			ParameterInfo::Const (const_token, ident) =>
+				ParameterInfo::Const (const_token . clone (), mangle_ident (ident))
+		}
+	}
 }
 
 pub fn parse_generics (generics: Generics) ->
@@ -71,7 +98,7 @@ pub fn parse_generics (generics: Generics) ->
 					default_values . push (ParameterValue::Type (ty));
 				}
 
-				parameters . push (ParameterInfo::TypeOrConst (type_param . ident));
+				parameters . push (ParameterInfo::Type (type_param . ident));
 			},
 			GenericParam::Const (const_param) =>
 			{
@@ -80,7 +107,7 @@ pub fn parse_generics (generics: Generics) ->
 					default_values . push (ParameterValue::Const (expr));
 				}
 
-				parameters . push (ParameterInfo::TypeOrConst (const_param . ident));
+				parameters . push (ParameterInfo::Const (const_param . const_token, const_param . ident));
 			}
 		}
 	}
@@ -102,10 +129,9 @@ pub enum ParameterValue
 
 impl TryFrom <GenericArgument> for ParameterValue
 {
-	// This being syn::Error.
 	type Error = Error;
 
-	fn try_from (value: GenericArgument) -> Result <ParameterValue>
+	fn try_from (value: GenericArgument) -> Result <Self>
 	{
 		match value
 		{
@@ -114,6 +140,19 @@ impl TryFrom <GenericArgument> for ParameterValue
 			GenericArgument::Type (ty) => Ok (ParameterValue::Type (ty)),
 			GenericArgument::Const (expr) => Ok (ParameterValue::Const (expr)),
 			_ => Err (Error::new_spanned (value, "Constraints make no sense in this context"))
+		}
+	}
+}
+
+impl <'a> From <&'a ParameterInfo> for ParameterValue
+{
+	fn from (info: &'a ParameterInfo) -> Self
+	{
+		match info
+		{
+			ParameterInfo::Lifetime (lifetime) => ParameterValue::Lifetime (lifetime . clone ()),
+			ParameterInfo::Type (ident) => ParameterValue::Type (parse_quote! (#ident)),
+			ParameterInfo::Const (_, ident) => ParameterValue::Const (parse_quote! (#ident))
 		}
 	}
 }
