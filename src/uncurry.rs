@@ -2,7 +2,7 @@ use syn::{Attribute, Visibility, Path, Ident, parse_quote};
 use syn::parse::{Result, Error};
 use quote::{quote, ToTokens, format_ident};
 
-use crate::syntax::mangle_ident;
+use crate::mangle::mangle_ident;
 
 pub fn uncurry_macro_ident (base_info_ident: &Ident) -> Ident
 {

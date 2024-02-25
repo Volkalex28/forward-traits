@@ -3,8 +3,8 @@ use syn::parse::{Result, Error};
 use syn_derive::Parse;
 use quote::quote;
 
-use super::TraitDefInfo;
 use crate::uncurry::{uncurry_macro_ident, get_trait_ident, gen_uncurry_macro};
+use crate::trait_def_info::TraitDefInfo;
 
 #[derive (Parse)]
 struct SupplyForwardingInfoForTrait
