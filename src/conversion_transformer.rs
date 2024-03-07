@@ -53,7 +53,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#base_type: std::convert::AsRefMut <#delegated_type>)
+				parse_quote! (#base_type: std::convert::AsMut <#delegated_type>)
 			);
 		}
 
@@ -74,7 +74,7 @@ impl Transformer for ConversionTransformer
 		&mut self,
 		delegated_type: &Type,
 		input: Expr,
-		input_type: &Type
+		_input_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -82,7 +82,7 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#input_type as std::convert::Into <#delegated_type>>::into (#input)
+			<Self as std::convert::Into <#delegated_type>>::into (#input)
 		);
 
 		Ok (input)
@@ -93,7 +93,7 @@ impl Transformer for ConversionTransformer
 		&mut self,
 		delegated_type: &Type,
 		input: Expr,
-		input_type: &Type
+		_input_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -101,7 +101,7 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#input_type as std::convert::AsRef <#delegated_type>>::as_ref (#input)
+			<Self as std::convert::AsRef <#delegated_type>>::as_ref (#input)
 		);
 
 		Ok (input)
@@ -112,7 +112,7 @@ impl Transformer for ConversionTransformer
 		&mut self,
 		delegated_type: &Type,
 		input: Expr,
-		input_type: &Type
+		_input_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -120,7 +120,7 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#input_type as std::convert::AsRefMut <#delegated_type>>::as_ref_mut (#input)
+			<Self as std::convert::AsMut <#delegated_type>>::as_mut (#input)
 		);
 
 		Ok (input)
@@ -131,7 +131,7 @@ impl Transformer for ConversionTransformer
 		&mut self,
 		delegated_type: &Type,
 		output: Expr,
-		output_type: &Type
+		_output_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -139,7 +139,7 @@ impl Transformer for ConversionTransformer
 
 		let output = parse_quote!
 		(
-			<#output_type as std::convert::From <#delegated_type>>::from (#output)
+			<Self as std::convert::From <#delegated_type>>::from (#output)
 		);
 
 		Ok (output)

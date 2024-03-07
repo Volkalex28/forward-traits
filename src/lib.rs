@@ -492,10 +492,10 @@ Point::try_from ([1f32] . as_slice ()) . unwrap_err ();
 Up to 4 different conversions may be used.  If `BaseType` were to forward an
 implementation by `DelegatedType`, those conversions would be:
 
- * `<BaseType as std::borrow::Borrow <DelegatedType>>::borrow ()` for function
+ * `<BaseType as std::convert::AsRef <DelegatedType>>::borrow ()` for function
  arguments of type `&Self`.
 
- * `<BaseType as std::borrow::BorrowMut <DelegatedType>>::borrow_mut ()` for
+ * `<BaseType as std::convert::AsMut <DelegatedType>>::borrow_mut ()` for
  function arguments of type `&mut Self`.
 
  * `<BaseType as std::convert::Into <DelegatedType>>::into ()` for function
