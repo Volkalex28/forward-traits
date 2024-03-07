@@ -325,13 +325,19 @@ providing annotations for.  The second is the annotation information.
 The annotation information is basically just a subset of the parts that make up
 a full trait definition.
 
+ * `pub` or `pub (restriction)` - An optional visibility specification.  This
+ isn't strictly a part of the trait's info, but will determine the visibility of
+ the generated macro and trait re-export that is generated as a side-effect of
+ this macro.
+
  * `trait` - just the keyword `trait`.
 
  * `<'a, T, const N: usize, ...>` - generic parameters, as would be found after
  the type identifier in a normal trait definition.  Any default values will be
  ignored, and should not be provided.
 
- * `where T: 'a, ...` - (optional) a where clause, as would be found in the trait definition.
+ * `where T: 'a, ...` - (optional) a where clause, as would be found in the
+ trait definition.
 
  * `{type Error; fn try_from (x: T) -> Result <Self, Self::Error>; ...}` - A
  block containing the definitions of the trait items.  Again, any default values
@@ -340,6 +346,17 @@ a full trait definition.
 All types included should be named by their fully-qualified paths whenever
 applicable.
 
+# Mechanism
+
+The way that this attribute works is by defining a macro which can be used to
+uncurry the trait forwarding information into another macro.
+
+Due to limitations of macro export rules, a mangled version of that macro's name
+is also created and exported into the crate root.  While these names are mangled
+so that they're unlikely to cause name collisions, annotating trait definitions
+of the same name in two different modules of the same crate will _definitely_
+cause a problem.  Please keep trait names within a single crate unique.
+
 # Example
 
 ```rust
@@ -347,7 +364,7 @@ applicable.
 supply_forwarding_info_for_trait!
 (
 	std::iter::FromIterator,
-	trait <A>
+	pub (crate) trait <A>
 	{
 		fn from_iter <T> (iter: T) -> Self
 		where T: IntoIterator <Item = A>;

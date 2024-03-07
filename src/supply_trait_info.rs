@@ -9,9 +9,9 @@ use crate::trait_def_info::TraitDefInfo;
 #[derive (Parse)]
 struct SupplyForwardingInfoForTrait
 {
-	visibility: Visibility,
 	forwarded_trait: Path,
 	_comma: Token! [,],
+	visibility: Visibility,
 	trait_def_info: TraitDefInfo
 }
 
@@ -20,8 +20,8 @@ fn try_supply_forwarding_info_for_trait_impl (input: proc_macro::TokenStream)
 {
 	let SupplyForwardingInfoForTrait
 	{
-		visibility,
 		forwarded_trait,
+		visibility,
 		trait_def_info,
 		..
 	}
