@@ -503,7 +503,7 @@ converted, not just the method receiver.  This also allows traits to be
 forwarded that require/provide methods that don't take a receiver, but still
 take arguments of the receiver type.
 
-Self types in container types like Result and Box are also converted.
+Self types in container types like `Result` and `Box` are also converted.
 
 */
 #[proc_macro]
@@ -600,7 +600,7 @@ converted, not just the method receiver.  This also allows traits to be
 forwarded that require/provide methods that don't take a receiver, but still
 take arguments of the receiver type.
 
-Self types in container types like Result and Box are also converted.
+Self types in container types like `Result` and `Box` are also converted.
 
 */
 #[proc_macro]
