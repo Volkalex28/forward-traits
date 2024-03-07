@@ -45,7 +45,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#base_type: std::borrow::Borrow <#delegated_type>)
+				parse_quote! (#base_type: std::convert::AsRef <#delegated_type>)
 			);
 		}
 
@@ -53,7 +53,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#base_type: std::borrow::BorrowMut <#delegated_type>)
+				parse_quote! (#base_type: std::convert::AsRefMut <#delegated_type>)
 			);
 		}
 
@@ -101,7 +101,7 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#input_type as std::borrow::Borrow <#delegated_type>>::borrow (#input)
+			<#input_type as std::convert::AsRef <#delegated_type>>::as_ref (#input)
 		);
 
 		Ok (input)
@@ -120,7 +120,7 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#input_type as std::borrow::BorrowMut <#delegated_type>>::borrow_mut (#input)
+			<#input_type as std::convert::AsRefMut <#delegated_type>>::as_ref_mut (#input)
 		);
 
 		Ok (input)
