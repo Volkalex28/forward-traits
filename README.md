@@ -6,4 +6,5 @@ members, and forwarding traits implemented by types that the receiver type can
 convert to.  These methods may be used in combination on the same receiver type.
 This crate fully supports generic traits and struct types.
 
-See crate documentation for more details.
+See [crate documentation](https://docs.rs/forward-traits/latest/forward_traits/index.html)
+for more details.
