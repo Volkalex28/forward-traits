@@ -6,7 +6,8 @@ pub struct ForwardedTraitInfo
 {
 	pub for_token: Option <Token! [for]>,
 	pub generics: Generics,
-	pub trait_path: Path
+	pub trait_path: Path,
+	pub semi_token: Option <Token! [;]>
 }
 
 impl Parse for ForwardedTraitInfo
@@ -22,7 +23,13 @@ impl Parse for ForwardedTraitInfo
 
 		generics . where_clause = input . parse ()?;
 
-		Ok (ForwardedTraitInfo {for_token, generics, trait_path})
+		let semi_token = if generics . where_clause . is_some ()
+		{
+			Some (input . parse ()?)
+		}
+		else { None };
+
+		Ok (ForwardedTraitInfo {for_token, generics, trait_path, semi_token})
 	}
 }
 
@@ -40,5 +47,7 @@ impl ToTokens for ForwardedTraitInfo
 		self . trait_path . to_tokens (tokens);
 
 		self . generics . where_clause . to_tokens (tokens);
+
+		self . semi_token . to_tokens (tokens);
 	}
 }

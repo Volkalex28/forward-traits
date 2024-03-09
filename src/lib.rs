@@ -417,10 +417,11 @@ collide with the receiver type's generic parameters.
 Additionally, if additional where predicates need to be provided on top of those
 found in the type definition and trait definition (and besides those which could
 be provided automatically by the forwarding macro), then those may also be
-introduced by suffixing the trait path with a where clause.
+introduced by suffixing the trait path with a where clause.  If a where clause
+is included, the where clause must be followed by a semicolon.
 
 Putting that all together, a description of a trait to be forwarded might look
-like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a`.
+like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
 
 # Example
 
@@ -564,10 +565,11 @@ collide with the receiver type's generic parameters.
 Additionally, if additional where predicates need to be provided on top of those
 found in the type definition and trait definition (and besides those which could
 be provided automatically by the forwarding macro), then those may also be
-introduced by suffixing the trait path with a where clause.
+introduced by suffixing the trait path with a where clause.  If a where clause
+is included, the where clause must be followed by a semicolon.
 
 Putting that all together, a description of a trait to be forwarded might look
-like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a`.
+like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
 
 # Example
 
