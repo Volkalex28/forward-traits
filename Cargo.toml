@@ -7,7 +7,7 @@ description = "A general trait-forwarding crate"
 homepage = "https://github.com/Zistack/forward-traits"
 repository = "https://github.com/Zistack/forward-traits"
 readme = "README.md"
-keywords = ["trait", "forward", "forwarding", "newtype"]
+keywords = ["trait", "forward", "forwarding", "newtype", "delegation"]
 categories = ["rust-patterns", "development-tools"]
 
 [dependencies]
