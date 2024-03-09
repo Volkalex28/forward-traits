@@ -325,16 +325,16 @@ providing annotations for.  The second is the annotation information.
 The annotation information is basically just a subset of the parts that make up
 a full trait definition.
 
- * `pub` or `pub (restriction)` - An optional visibility specification.  This
+ * `pub` or `pub (restriction)` - (optional) A visibility specification.  This
  isn't strictly a part of the trait's info, but will determine the visibility of
  the generated macro and trait re-export that is generated as a side-effect of
  this macro.
 
  * `trait` - just the keyword `trait`.
 
- * `<'a, T, const N: usize, ...>` - generic parameters, as would be found after
- the type identifier in a normal trait definition.  Any default values will be
- ignored, and should not be provided.
+ * `<'a, T, const N: usize, ...>` - (optional) generic parameters, as would be
+ found after the type identifier in a normal trait definition.  Any default
+ values will be ignored, and should not be provided.
 
  * `where T: 'a, ...` - (optional) a where clause, as would be found in the
  trait definition.
