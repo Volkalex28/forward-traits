@@ -24,7 +24,6 @@ use syn::fold
 	Fold,
 	fold_lifetime,
 	fold_type,
-	fold_path,
 	fold_type_param,
 	fold_expr,
 	fold_const_param
@@ -203,6 +202,71 @@ impl PartialEval
 	}
 }
 
+macro_rules! make_type_key
+{
+	($ident: expr) => { &ParameterInfo::Type ($ident) }
+}
+
+macro_rules! make_const_key
+{
+	($ident: expr) =>
+	{
+		&ParameterInfo::Const (<Token! [const]>::default (), $ident)
+	}
+}
+
+macro_rules! fold_qpath
+{
+	($fold_qpath: ident, $QPath: ident, $PVariant: ident, $make_key: ident) =>
+	{
+		fn $fold_qpath (&mut self, node: $QPath) -> $QPath
+		{
+			if let $QPath::Path (qpath) = &node
+			{
+				if qpath . qself . is_none ()
+				{
+					if let Some (ident) = qpath . path . get_ident ()
+					{
+						if let Some (ParameterValue::$PVariant (ty)) = self
+							. parameters
+							. get ($make_key! (ident . clone ()))
+						{
+							return ty . clone ();
+						}
+					}
+				}
+
+				if let Some (first_segment) = qpath . path . segments . first ()
+				{
+					if let PathArguments::None = first_segment . arguments
+					{
+						let maybe_parameter_value = self
+							. parameters
+							. get ($make_key! (first_segment . ident . clone ()))
+							. cloned ();
+
+						if let Some (ParameterValue::$PVariant (ty)) =
+							maybe_parameter_value
+						{
+							let tail_segments = qpath
+								. path
+								. segments
+								. iter ()
+								. skip (1)
+								. cloned ()
+								. map (|segment| self . fold_path_segment (segment));
+
+							return parse_quote! (<#ty>#(::#tail_segments)*);
+						}
+					}
+				}
+			}
+
+			$fold_qpath (self, node)
+		}
+	}
+}
+
 impl Fold for PartialEval
 {
 	fn fold_lifetime (&mut self, node: Lifetime) -> Lifetime
@@ -216,64 +280,7 @@ impl Fold for PartialEval
 		fold_lifetime (self, node)
 	}
 
-	fn fold_type (&mut self, node: Type) -> Type
-	{
-		if let Type::Path (ref type_path) = node
-		{
-			if type_path . qself . is_none ()
-			{
-				if let Some (ident) = type_path . path . get_ident ()
-				{
-					if let Some (ParameterValue::Type (ty)) =
-						self . parameters . get
-						(
-							&ParameterInfo::Type (ident . clone ())
-						)
-					{
-						return ty . clone ();
-					}
-				}
-			}
-		}
-
-		fold_type (self, node)
-	}
-
-	fn fold_path (&mut self, node: Path) -> Path
-	{
-		if node . leading_colon . is_some () { return fold_path (self, node); }
-
-		let first_segment = match node . segments . first ()
-		{
-			None => return fold_path (self, node),
-			Some (first_segment) => first_segment
-		};
-
-		match first_segment . arguments
-		{
-			PathArguments::None => {},
-			_ => return fold_path (self, node)
-		};
-
-		let ty = match self
-			. parameters
-			. get (&ParameterInfo::Type (first_segment . ident . clone ()))
-		{
-			Some (ParameterValue::Type (ty)) => ty,
-			_ => return fold_path (self, node),
-		};
-
-		let mut new_path: Path = parse_quote! (<#ty>);
-		new_path . segments . extend
-		(
-			node
-				. segments
-				. into_iter ()
-				. skip (1)
-				. map (|segment| self . fold_path_segment (segment))
-		);
-		new_path
-	}
+	fold_qpath! (fold_type, Type, Type, make_type_key);
 
 	fn fold_type_param (&mut self, node: TypeParam) -> TypeParam
 	{
@@ -310,32 +317,7 @@ impl Fold for PartialEval
 		fold_type_param (self, node)
 	}
 
-	fn fold_expr (&mut self, node: Expr) -> Expr
-	{
-		if let Expr::Path (ref expr_path) = node
-		{
-			if expr_path . qself . is_none ()
-			{
-				if let Some (ident) = expr_path . path . get_ident ()
-				{
-					if let Some (ParameterValue::Const (expr)) =
-						self . parameters . get
-						(
-							&ParameterInfo::Const
-							(
-								<Token! [const]>::default (),
-								ident . clone ()
-							)
-						)
-					{
-						return expr . clone ();
-					}
-				}
-			}
-		}
-
-		fold_expr (self, node)
-	}
+	fold_qpath! (fold_expr, Expr, Const, make_const_key);
 
 	fn fold_const_param (&mut self, node: ConstParam) -> ConstParam
 	{
