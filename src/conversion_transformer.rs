@@ -2,8 +2,6 @@ use syn::{Type, Expr, WherePredicate, Token, parse_quote};
 use syn::punctuated::Punctuated;
 use syn::Result;
 
-use crate::transformer::Transformer;
-
 pub struct ConversionTransformer
 {
 	use_into: bool,
@@ -24,57 +22,16 @@ impl ConversionTransformer
 			use_from: false,
 		}
 	}
-
-	pub fn add_conversion_predicates
-	(
-		&self,
-		base_type: &Type,
-		delegated_type: &Type,
-		predicates: &mut Punctuated <WherePredicate, Token! [,]>
-	)
-	{
-		if self . use_into
-		{
-			predicates . push
-			(
-				parse_quote! (#base_type: std::convert::Into <#delegated_type>)
-			);
-		}
-
-		if self . use_borrow
-		{
-			predicates . push
-			(
-				parse_quote! (#base_type: std::convert::AsRef <#delegated_type>)
-			);
-		}
-
-		if self . use_borrow_mut
-		{
-			predicates . push
-			(
-				parse_quote! (#base_type: std::convert::AsMut <#delegated_type>)
-			);
-		}
-
-		if self . use_from
-		{
-			predicates . push
-			(
-				parse_quote! (#base_type: std::convert::From <#delegated_type>)
-			);
-		}
-	}
 }
 
-impl Transformer for ConversionTransformer
+impl ConversionTransformer
 {
-	fn transform_input_self
+	pub fn transform_input
 	(
 		&mut self,
-		delegated_type: &Type,
 		input: Expr,
-		_input_type: &Type
+		from_type: &Type,
+		to_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -82,18 +39,18 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<Self as std::convert::Into <#delegated_type>>::into (#input)
+			<#from_type as std::convert::Into <#to_type>>::into (#input)
 		);
 
 		Ok (input)
 	}
 
-	fn transform_input_ref_self
+	pub fn transform_input_ref
 	(
 		&mut self,
-		delegated_type: &Type,
 		input: Expr,
-		_input_type: &Type
+		from_type: &Type,
+		to_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -101,18 +58,18 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<Self as std::convert::AsRef <#delegated_type>>::as_ref (#input)
+			<#from_type as std::convert::AsRef <#to_type>>::as_ref (#input)
 		);
 
 		Ok (input)
 	}
 
-	fn transform_input_ref_mut_self
+	pub fn transform_input_ref_mut
 	(
 		&mut self,
-		delegated_type: &Type,
 		input: Expr,
-		_input_type: &Type
+		from_type: &Type,
+		to_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -120,18 +77,18 @@ impl Transformer for ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<Self as std::convert::AsMut <#delegated_type>>::as_mut (#input)
+			<#from_type as std::convert::AsMut <#to_type>>::as_mut (#input)
 		);
 
 		Ok (input)
 	}
 
-	fn transform_output_self
+	pub fn transform_output
 	(
 		&mut self,
-		delegated_type: &Type,
 		output: Expr,
-		_output_type: &Type
+		from_type: &Type,
+		to_type: &Type
 	)
 	-> Result <Expr>
 	{
@@ -139,9 +96,50 @@ impl Transformer for ConversionTransformer
 
 		let output = parse_quote!
 		(
-			<Self as std::convert::From <#delegated_type>>::from (#output)
+			<#from_type as std::convert::From <#to_type>>::from (#output)
 		);
 
 		Ok (output)
+	}
+
+	pub fn add_predicates
+	(
+		&self,
+		predicates: &mut Punctuated <WherePredicate, Token! [,]>,
+		from_type: &Type,
+		to_type: &Type
+	)
+	{
+		if self . use_into
+		{
+			predicates . push
+			(
+				parse_quote! (#from_type: std::convert::Into <#to_type>)
+			);
+		}
+
+		if self . use_borrow
+		{
+			predicates . push
+			(
+				parse_quote! (#from_type: std::convert::AsRef <#to_type>)
+			);
+		}
+
+		if self . use_borrow_mut
+		{
+			predicates . push
+			(
+				parse_quote! (#from_type: std::convert::AsMut <#to_type>)
+			);
+		}
+
+		if self . use_from
+		{
+			predicates . push
+			(
+				parse_quote! (#from_type: std::convert::From <#to_type>)
+			);
+		}
 	}
 }

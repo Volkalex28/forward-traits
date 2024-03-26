@@ -20,7 +20,7 @@ supply_forwarding_info_for_trait!
 	}
 );
 
-use forward_traits::{forward_receiver, forward_traits_via_member};
+use forward_traits::{forward_receiver, forward_traits};
 
 #[allow (dead_code)]
 #[forward_receiver]
@@ -30,7 +30,7 @@ struct Foo
 	items: Vec <u8>
 }
 
-forward_traits_via_member! (Foo . items, Index <usize>, IndexMut <usize>);
+forward_traits! (for Foo . items impl Index <usize> + IndexMut <usize>);
 
 fn main ()
 {

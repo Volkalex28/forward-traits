@@ -2,7 +2,7 @@ use forward_traits
 ::{
 	supply_forwarding_info_for_trait,
 	forward_receiver,
-	forward_traits_via_conversion
+	forward_traits
 };
 
 supply_forwarding_info_for_trait!
@@ -33,7 +33,7 @@ impl AsRef <A> for B
 	}
 }
 
-forward_traits_via_conversion! (B -> A, Clone where A: Copy;);
+forward_traits! (for B -> A impl Clone where A: Copy;);
 
 fn main ()
 {

@@ -1,10 +1,4 @@
-use forward_traits
-::{
-	forwardable,
-	forward_receiver,
-	forward_traits_via_conversion,
-	forward_traits_via_member
-};
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 
 #[forwardable]
 trait Convert <T>
@@ -56,12 +50,8 @@ where T: Accumulatable
 	}
 }
 
-forward_traits_via_conversion!
-(
-	Wrap -> T,
-	Convert <T::Accumulator> where T: Accumulatable;
-);
-forward_traits_via_member! (Wrap . 0, Accumulatable, Acc <T>);
+forward_traits! (for Wrap -> T impl Convert <T::Accumulator> where T: Accumulatable;);
+forward_traits! (for Wrap . 0 impl Accumulatable + Acc <T>);
 
 fn main ()
 {

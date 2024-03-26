@@ -1,4 +1,4 @@
-use forward_traits::{forwardable, forward_receiver, forward_traits_via_member};
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 
 #[forwardable]
 trait Foo <A, B = A>
@@ -24,7 +24,7 @@ struct Receiver
 	d: Delegated
 }
 
-forward_traits_via_member! (Receiver . d, Foo <u32>);
+forward_traits! (for Receiver . d impl Foo <u32>);
 
 fn main ()
 {

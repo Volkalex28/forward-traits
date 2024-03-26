@@ -4,32 +4,32 @@ use quote::{quote, ToTokens, format_ident};
 
 use crate::mangle::mangle_ident;
 
-pub fn uncurry_macro_ident (base_info_ident: &Ident) -> Ident
+pub fn get_macro_ident (ident: &Ident) -> Ident
 {
-	format_ident! ("uncurry_trait_forwarding_info_for_{}", base_info_ident)
+	format_ident! ("uncurry_trait_forwarding_info_for_{}", ident)
 }
 
-pub fn get_trait_ident (trait_path: &Path) -> Result <Ident>
+pub fn get_path_ident (path: &Path) -> Result <Ident>
 {
-	match trait_path . segments . last ()
+	match path . segments . last ()
 	{
 		None => Err
 		(
-			Error::new_spanned (trait_path, "Path to trait must be nonempty")
+			Error::new_spanned (path, "Path must be nonempty")
 		),
 		Some (segment) => Ok (segment . ident . clone ())
 	}
 }
 
-pub fn get_trait_macro_path (trait_path: &Path) -> Result <Path>
+pub fn get_macro_path (path: &Path) -> Result <Path>
 {
-	let trait_ident = get_trait_ident (trait_path)?;
-	let trait_macro_ident = uncurry_macro_ident (&trait_ident);
-	let mut trait_macro_path = trait_path . clone ();
-	trait_macro_path . segments . pop ();
-	trait_macro_path . segments . push_value (parse_quote! (#trait_macro_ident));
+	let ident = get_path_ident (path)?;
+	let macro_ident = get_macro_ident (&ident);
+	let mut macro_path = path . clone ();
+	macro_path . segments . pop ();
+	macro_path . segments . push_value (parse_quote! (#macro_ident));
 
-	Ok (trait_macro_path)
+	Ok (macro_path)
 }
 
 pub fn gen_uncurry_macro <T>

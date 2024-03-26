@@ -2,7 +2,7 @@ use forward_traits
 ::{
 	supply_forwarding_info_for_trait,
 	forward_receiver,
-	forward_traits_via_conversion
+	forward_traits
 };
 
 supply_forwarding_info_for_trait!
@@ -32,7 +32,7 @@ impl From <[f32; 2]> for Point
 	}
 }
 
-forward_traits_via_conversion! (Point -> [f32; 2], for <'a> TryFrom <&'a [f32]>);
+forward_traits! (for Point -> [f32; 2] impl for <'a> TryFrom <&'a [f32]>);
 
 fn main ()
 {

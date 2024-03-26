@@ -1,6 +1,6 @@
 use std::convert::{AsRef, AsMut};
 
-use forward_traits::{forwardable, forward_receiver, forward_traits_via_conversion};
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 
 #[forwardable]
 trait Foo
@@ -56,7 +56,7 @@ impl AsMut <A> for B
 	}
 }
 
-forward_traits_via_conversion! (B -> A, Foo);
+forward_traits! (for B -> A impl Foo);
 
 fn main ()
 {

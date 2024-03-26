@@ -1,4 +1,4 @@
-use forward_traits::{forwardable, forward_receiver, forward_traits_via_member};
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 
 #[forwardable]
 trait FooTrait
@@ -24,7 +24,7 @@ impl FooTrait for A
 #[forward_receiver]
 struct B (A);
 
-forward_traits_via_member! (B . 0, FooTrait);
+forward_traits! (for B . 0 impl FooTrait);
 
 fn main ()
 {

@@ -4,7 +4,7 @@ use syn::fold::Fold;
 use syn_derive::Parse;
 use quote::ToTokens;
 
-use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
+use crate::uncurry::{get_macro_ident, gen_uncurry_macro};
 use crate::transform_use::TransformUse;
 use crate::trait_def_info::TraitDefInfo;
 
@@ -41,15 +41,20 @@ fn try_forwardable_impl
 		{
 			let vis = item_trait . vis . clone ();
 
-			let macro_ident = uncurry_macro_ident (&item_trait . ident);
+			let macro_ident = get_macro_ident (&item_trait . ident);
 
 			let trait_def_info = TraitDefInfo::try_from (item_trait)?;
 
-			tokens . extend (gen_uncurry_macro (vis, macro_ident, trait_def_info));
+			tokens . extend
+			(
+				gen_uncurry_macro (vis, macro_ident, trait_def_info)
+			);
 		},
 		Forwardable::ItemUse (item_use) =>
 		{
-			TransformUse {} . fold_item_use (item_use) . to_tokens (&mut tokens);
+			TransformUse {}
+				. fold_item_use (item_use)
+				. to_tokens (&mut tokens);
 		}
 	}
 

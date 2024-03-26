@@ -1,7 +1,6 @@
-use syn::{Type, Expr, parse_quote};
-use syn::parse::{Result, Error};
+use syn::{Expr, parse_quote};
+use syn::parse::Result;
 
-use crate::transformer::Transformer;
 use crate::member::Member;
 
 pub struct MemberTransformer
@@ -17,14 +16,12 @@ impl MemberTransformer
 	}
 }
 
-impl Transformer for MemberTransformer
+impl MemberTransformer
 {
-	fn transform_input_self
+	pub fn transform_input
 	(
 		&mut self,
-		_delegated_type: &Type,
-		input: Expr,
-		_input_type: &Type
+		input: Expr
 	)
 	-> Result <Expr>
 	{
@@ -32,12 +29,10 @@ impl Transformer for MemberTransformer
 		Ok (parse_quote! (#input . #member))
 	}
 
-	fn transform_input_ref_self
+	pub fn transform_input_ref
 	(
 		&mut self,
-		_delegated_type: &Type,
-		input: Expr,
-		_input_type: &Type
+		input: Expr
 	)
 	-> Result <Expr>
 	{
@@ -45,35 +40,14 @@ impl Transformer for MemberTransformer
 		Ok (parse_quote! (&#input . #member))
 	}
 
-	fn transform_input_ref_mut_self
+	pub fn transform_input_ref_mut
 	(
 		&mut self,
-		_delegated_type: &Type,
-		input: Expr,
-		_input_type: &Type
+		input: Expr
 	)
 	-> Result <Expr>
 	{
 		let member = &self . member;
 		Ok (parse_quote! (&mut #input . #member))
-	}
-
-	fn transform_output_self
-	(
-		&mut self,
-		_delegated_type: &Type,
-		_output: Expr,
-		output_type: &Type
-	)
-	-> Result <Expr>
-	{
-		Err
-		(
-			Error::new_spanned
-			(
-				output_type,
-				"Cannot convert return values of `Self` for traits forwarded via member"
-			)
-		)
 	}
 }

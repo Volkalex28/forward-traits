@@ -12,66 +12,33 @@ pub enum Member
 	Index (Index)
 }
 
-pub fn get_member_type (fields: &Fields, member: &Member) -> Result <Type>
+impl Member
 {
-	match fields
+	pub fn get_member_type (&self, fields: &Fields) -> Result <Type>
 	{
-		Fields::Named (named_fields) =>
+		match fields
 		{
-			if let Member::Ident (member_ident) = member
+			Fields::Named (named_fields) =>
 			{
-				named_fields
-					. named
-					. iter ()
-					. find_map
-					(
-						|field|
-						(field . ident . as_ref () . unwrap () == member_ident)
-							. then (|| field . ty . clone ())
-					)
-					. ok_or_else
-					(
-						|| Error::new_spanned
-						(
-							member_ident,
-							"Member not found in base type"
-						)
-					)
-			}
-			else
-			{
-				Err
-				(
-					Error::new_spanned
-					(
-						member,
-						"Must use ident to name member of regular struct"
-					)
-				)
-			}
-		},
-		Fields::Unnamed (unnamed_fields) =>
-		{
-			if let Member::Index (member_index) = member
-			{
-				let usize_index: usize = member_index
-					. index
-					. try_into ()
-					. map_err
-					(
-						|err: <usize as TryFrom <u32>>::Error|
-						{
-							Error::new_spanned
-							(
-								member_index,
-								err . to_string ()
-							)
-						}
-					)?;
-
-				if unnamed_fields . unnamed . len () > usize_index
+				if let Member::Ident (member_ident) = self
 				{
-					Ok (unnamed_fields . unnamed [usize_index] . ty . clone ())
+					named_fields
+						. named
+						. iter ()
+						. find_map
+						(
+							|field|
+							(field . ident . as_ref () . unwrap () == member_ident)
+								. then (|| field . ty . clone ())
+						)
+						. ok_or_else
+						(
+							|| Error::new_spanned
+							(
+								member_ident,
+								"Member not found in type"
+							)
+						)
 				}
 				else
 				{
@@ -79,27 +46,63 @@ pub fn get_member_type (fields: &Fields, member: &Member) -> Result <Type>
 					(
 						Error::new_spanned
 						(
-							member_index,
-							"Member not found in base type"
+							self,
+							"Must use ident to name member of regular struct"
 						)
 					)
 				}
-			}
-			else
+			},
+			Fields::Unnamed (unnamed_fields) =>
 			{
-				Err
-				(
-					Error::new_spanned
+				if let Member::Index (member_index) = self
+				{
+					let usize_index: usize = member_index
+						. index
+						. try_into ()
+						. map_err
+						(
+							|err: <usize as TryFrom <u32>>::Error|
+							{
+								Error::new_spanned
+								(
+									member_index,
+									err . to_string ()
+								)
+							}
+						)?;
+
+					if unnamed_fields . unnamed . len () > usize_index
+					{
+						Ok (unnamed_fields . unnamed [usize_index] . ty . clone ())
+					}
+					else
+					{
+						Err
+						(
+							Error::new_spanned
+							(
+								member_index,
+								"Member not found in type"
+							)
+						)
+					}
+				}
+				else
+				{
+					Err
 					(
-						member,
-						"Must use index to name member of a tuple struct"
+						Error::new_spanned
+						(
+							self,
+							"Must use index to name member of a tuple struct"
+						)
 					)
-				)
-			}
-		},
-		Fields::Unit => Err
-		(
-			Error::new_spanned (member, "Member not found in base type")
-		)
+				}
+			},
+			Fields::Unit => Err
+			(
+				Error::new_spanned (self, "Member not found in type")
+			)
+		}
 	}
 }

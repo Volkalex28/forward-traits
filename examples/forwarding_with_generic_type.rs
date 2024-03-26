@@ -2,7 +2,7 @@ use forward_traits
 ::{
 	supply_forwarding_info_for_trait,
 	forward_receiver,
-	forward_traits_via_member
+	forward_traits
 };
 
 supply_forwarding_info_for_trait!
@@ -20,7 +20,7 @@ supply_forwarding_info_for_trait!
 #[forward_receiver]
 struct VecWrapper <T> (Vec <T>);
 
-forward_traits_via_member! (VecWrapper . 0, IntoIterator);
+forward_traits! (for VecWrapper . 0 impl IntoIterator);
 
 fn main ()
 {

@@ -2,12 +2,22 @@ use syn::{Generics, Path, Token};
 use syn::parse::{Parse, ParseStream, Result};
 use quote::ToTokens;
 
+use crate::uncurry::get_macro_path;
+
 pub struct ForwardedTraitInfo
 {
 	pub for_token: Option <Token! [for]>,
 	pub generics: Generics,
 	pub trait_path: Path,
 	pub semi_token: Option <Token! [;]>
+}
+
+impl ForwardedTraitInfo
+{
+	pub fn get_macro_path (&self) -> Result <Path>
+	{
+		get_macro_path (&self . trait_path)
+	}
 }
 
 impl Parse for ForwardedTraitInfo

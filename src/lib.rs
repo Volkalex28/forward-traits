@@ -16,7 +16,7 @@ for the individual macros.
 In order to forward a trait, some basic things are needed.
 
 ```rust
-use forward_traits::{forwardable, forward_receiver, forward_traits_via_member};
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 ```
 
 We need a trait definition which is annotated with information which is used to
@@ -65,32 +65,31 @@ attribute.
 struct B (A);
 ```
 
-Lastly, we need to specify that we want to forward a trait using one of the
-forwarding macros. In this case, we want to forward a trait implemented by a
-member, so we write:
+Lastly, we need to specify that we want to forward a trait.  In this case, we
+want to forward a trait implemented by a member, so we write:
 
 ```rust
-# use forward_traits::{forwardable, forward_receiver, forward_traits_via_member};
+# use forward_traits::{forwardable, forward_receiver, forward_traits};
 # #[forwardable]
 # trait FooTrait { type Bar; fn foo (&self) -> &Self::Bar; const BAZ: u32; }
 # struct A {}
 # impl FooTrait for A { type Bar = Self; fn foo (&self) -> &Self::Bar { self } const BAZ: u32 = 42; }
 # #[forward_receiver]
 # struct B (A);
-forward_traits_via_member! (B . 0, FooTrait);
+forward_traits! (for B . 0 impl FooTrait);
 ```
 
 And now we can see that the trait is properly forwarded.
 
 ```rust
-# use forward_traits::{forwardable, forward_receiver, forward_traits_via_member};
+# use forward_traits::{forwardable, forward_receiver, forward_traits};
 # #[forwardable]
 # trait FooTrait { type Bar; fn foo (&self) -> &Self::Bar; const BAZ: u32; }
 # struct A {}
 # impl FooTrait for A { type Bar = Self; fn foo (&self) -> &Self::Bar { self } const BAZ: u32 = 42; }
 # #[forward_receiver]
 # struct B (A);
-# forward_traits_via_member! (B . 0, FooTrait);
+# forward_traits! (for B . 0 impl FooTrait);
 assert_eq! (<B as FooTrait>::BAZ, 42);
 ```
 
@@ -136,7 +135,7 @@ use forward_traits
 ::{
 	supply_forwarding_info_for_trait,
 	forward_receiver,
-	forward_traits_via_member
+	forward_traits
 };
 
 // This has the side-effect of importing IntoIterator into the current scope.
@@ -155,7 +154,7 @@ supply_forwarding_info_for_trait!
 struct VecWrapper <T> (Vec <T>);
 
 // Note that we are referring to the IntoIterator in the current scope.
-forward_traits_via_member! (VecWrapper . 0, IntoIterator);
+forward_traits! (for VecWrapper . 0 impl IntoIterator);
 
 // Now we can call the trait method on the wrapper type.
 VecWrapper (vec! (1, 2, 3)) . into_iter ();
@@ -178,16 +177,25 @@ mod forwarded_trait_info;
 
 mod member;
 
-mod transformer;
 mod conversion_transformer;
 mod member_transformer;
+mod value_transformer;
+mod transformer;
+
+mod base_conversion_transform_info;
+mod base_member_transform_info;
+mod base_transform_info;
+
+mod conversion_transform_info;
+mod member_transform_info;
+mod transform_info;
+mod additional_transform_infos;
 
 mod forwardable;
 mod supply_trait_info;
 mod forward_receiver;
 
-mod forward_via_conversion;
-mod forward_via_member;
+mod forward_traits;
 
 use proc_macro::TokenStream;
 
@@ -326,22 +334,22 @@ The annotation information is basically just a subset of the parts that make up
 a full trait definition.
 
  * `pub` or `pub (restriction)` - (optional) A visibility specification.  This
- isn't strictly a part of the trait's info, but will determine the visibility of
- the generated macro and trait re-export that is generated as a side-effect of
- this macro.
+   isn't strictly a part of the trait's info, but will determine the visibility
+   of the generated macro and trait re-export that is generated as a side-effect
+   of this macro.
 
  * `trait` - just the keyword `trait`.
 
  * `<'a, T, const N: usize, ...>` - (optional) generic parameters, as would be
- found after the type identifier in a normal trait definition.  Any default
- values will be ignored, and should not be provided.
+   found after the type identifier in a normal trait definition.  Any default
+   values will be ignored, and should not be provided.
 
  * `where T: 'a, ...` - (optional) a where clause, as would be found in the
- trait definition.
+   trait definition.
 
  * `{type Error; fn try_from (x: T) -> Result <Self, Self::Error>; ...}` - A
- block containing the definitions of the trait items.  Again, any default values
- (or implementations) will be ignored, and should not be provided.
+   block containing the definitions of the trait items.  Again, any default
+   values (or implementations) will be ignored, and should not be provided.
 
 All types included should be named by their fully-qualified paths whenever
 applicable.
@@ -360,7 +368,7 @@ cause a problem.  Please keep trait names within a single crate unique.
 # Example
 
 ```rust
-# use forward_traits::{supply_forwarding_info_for_trait, forward_receiver, forward_traits_via_conversion};
+# use forward_traits::{supply_forwarding_info_for_trait, forward_receiver, forward_traits};
 supply_forwarding_info_for_trait!
 (
 	std::iter::FromIterator,
@@ -373,7 +381,7 @@ supply_forwarding_info_for_trait!
 # #[forward_receiver]
 # struct VecWrapper <T> (Vec <T>);
 # impl <T> From <Vec <T>> for VecWrapper <T> { fn from (vec: Vec <T>) -> Self { Self (vec) } }
-# forward_traits_via_conversion! (VecWrapper -> Vec <T>, FromIterator <T>);
+# forward_traits! (for VecWrapper -> Vec <T> impl FromIterator <T>);
 ```
 
 */
@@ -385,45 +393,155 @@ pub fn supply_forwarding_info_for_trait (input: TokenStream) -> TokenStream
 
 #[doc (hidden)]
 #[proc_macro]
-pub fn __forward_trait_via_conversion (input: TokenStream) -> TokenStream
+pub fn __forward_trait (input: TokenStream) -> TokenStream
 {
-	forward_via_conversion::__forward_trait_via_conversion_impl (input)
+	forward_traits::__forward_trait_impl (input)
 }
 
 /**
 
-This macro generates trait implementations based on conversions from the
-implementing type to a delegated type which already implements the trait.
+The namesake of the crate, this macro generates trait implementations by
+delegating the trait items to another type.
 
 # Usage
 
-The first argument to the macro is a specification of the base type and the
-delegated type.  This specification has the form `BaseTypeIdent ->
-path::to::DelegatedType`.
+The syntax for the argument to this macro is a little complicated.
 
-The remaining arguments are descriptions of traits that should be forwarded.
-The trait generic arguments, if any, will be interpreted as if the generic
-parameters from the base type are in scope.
+## Base Type Transformation
 
-If a trait would need additional generic arguments to be introduced in order to
-correctly specify the trait's generic parameters, these arguments can be
-provided by prefixing the trait path with a quantifier over those parameters.
-The syntax is similar to that of
-Higher-Ranked Trait Bounds, except that all forms of generic parameters are
-supported.  These parameters will be introduced into the `impl` scope along with
-the generic parameters of the receiver type, so make sure that their names don't
-collide with the receiver type's generic parameters.
+The first part of the syntax is a specification of the base type and how to
+transform it into the delegated type.  There are two such transformations
+available.
 
-Additionally, if additional where predicates need to be provided on top of those
-found in the type definition and trait definition (and besides those which could
-be provided automatically by the forwarding macro), then those may also be
-introduced by suffixing the trait path with a where clause.  If a where clause
-is included, the where clause must be followed by a semicolon.
+ * Conversion: `Ident -> Type`.  The type named by the ident (it is expected to
+   be in the same scope as the macro invocation) is transformed into the
+   delegated type via conversion traits.  For arguments, the following types are
+   converted using the specified traits.
 
-Putting that all together, a description of a trait to be forwarded might look
-like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
+   * `Self`: `std::convert::Into <DelegatedType>`
+   * `&Self`: `std::convert::AsRef <DelegatedType>`
+   * `&mut Self`: `std::convert::AsMut <DelegatedType>`
 
-# Example
+   Besides these specific types, `Result` and `Box` are also transformed if
+   their contents are a transformable type.  All arguments of a convertible type
+   are converted, not just the receiver.
+
+   The return value may be converted as well, if it is a form of `Self` type.
+   This uses the following trait.
+
+   * `-> Self`: `std::convert::From <DelegatedType>`
+
+   Like with arguments, `Result` and `Box` forms are also transformed.
+
+   The conversion traits that are actually used need to be implemented for the
+   base type.  Any conversion traits that are not used are not required.
+
+ * Member access: `Ident . Ident|Index`.  The first ident is the same as with
+   conversion.  The `Ident|Index` names a member of the struct to delegate to.
+   An ident is required in the case of a struct with named fields, and an index
+   is required in the case of a tuple struct.
+
+   `Self`, `&Self`, and `&mut Self` typed arguments are tranformed via member
+   access.  Like with conversion, `Result` and `Box` forms of transformable
+   types are also transformed.  Member delegation cannot transform return
+   values.
+
+## Additional Transformations
+
+After the base type transformation, we might want to list some other type
+transformations to be applied.  The set of conversions available is the same as
+for the base type transformation.  These specifications have a slightly
+different syntax, as they do not rely on type annotations like the base type
+transformation does.
+
+ * Conversion: `Type -> Type`.  Instead of an ident in the first position, we
+   have a full type.  The behavior is otherwise the same.
+
+ * Member access: `Type . Ident|Index : Type`.  Not only do we have a type in
+   the first position instead of an ident, but the type of the member must also
+   be provided.
+
+These transformations do not assume that the type on the left is in the same
+scope as the macro invocation.  The transformations applied, and the rules that
+must be followed for the types on the left side of these transformation
+specifications are otherwise the same as for the base type transformation.
+
+Note that the base type transformation only transforms forms of type `Self`.  If
+the base type is explicitly written out rather than being referred to with the
+`Self` type, then it won't be transformed by the base type transformation.
+
+The base type _can_ be used on the left-hand side of an additional
+transformation to specify that explicit forms of the base type should be
+transformed as well.
+
+## Forwarded Traits
+
+Lastly, we have the actual traits to forward.
+
+In the simplest form, this is just the path to the trait, plus a set of generic
+arguments (which will be interpreted as if the base type generics are in scope).
+
+However, additional generic paramters may be required in order to provide the
+trait with all of its generic arguments.  These may be supplied by prefixing the
+path to the trait with a `for <GenericParam, ...>` construction.  Keep in mind
+that any generic parameters provided as part of the transformation specification
+will also be in scope.
+
+Normally, the where clause is constructed by combining the where clause of on
+the type definition, the where clause provided with the transformation
+specifications, and the where clause on the trait definition, and then finally
+adding some additional traits necessary for the forwarding.  Some of the generic
+parameters or arguments may end up requiring some additional where predicates
+beyond the computed set, however.  These additional predicates may be provided
+by appending a where clause to the forwarded trait specification.  If a where
+clause is appended, it must also be followed by a semi-colon (`;`).
+
+If all of these syntactic elements are required in the same specification, you
+can end up with something looking like this:
+
+```rust,ignore
+for <GenericParam, ...> path::to::Trait <GenericArgument, ...> where WherePredicate, ...;
+```
+
+## Putting It All Together
+
+There are some additional bits of glue that are required in-between the parts.
+
+Before the base type transformation specification goes the `for` keyword.  If
+there are any generic parameters which should be introduced for all trait
+implementations beyond those introduced by the receiver type definition, they
+may be listed in angle brackets in-between the `for` keyword and the base type
+transformation specification.
+
+Additional transformations are listed, comma-separated, inside of square brackets
+(`[]`).  This angle-bracketed list comes immediately after the base type
+transformation.  The angle-bracketed list may be omitted in its entirety if no
+additional transformations are to be specified.
+
+If any additional where predicates should be introduced for all trait
+implementations beyond those introduced by the receiver type definition, a where
+clause may be provided after the additional transformations.
+
+The `impl` keyword comes next, marking the beginning of the list of forwarded
+traits.
+
+Finally, the forwarded traits are listed, separated by plus tokens (`+`).
+
+The overall structure, including all optional parts, looks like this.
+
+```rust,ignore
+forward_traits!
+(
+	for <GenericParam, ...> BaseTransformation [AdditionalTransformation, ...]
+	where WherePredicate, ...
+	impl ForwardedTrait + ...
+);
+```
+
+# Examples
+
+Here we need to introduce a lifetime for one of our forwarded trait's generic
+arguments.
 
 ```rust
 # use forward_traits::supply_forwarding_info_for_trait;
@@ -451,7 +569,7 @@ like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
 # 	}
 # );
 #
-use forward_traits::{forward_receiver, forward_traits_via_conversion};
+use forward_traits::{forward_receiver, forward_traits};
 
 #[derive (Debug)]
 #[forward_receiver]
@@ -480,7 +598,7 @@ impl From <[f32; 2]> for Point
 // Make sure that the traits we want are annotated.  In this case, we've
 // annotated some std traits and imported them into the local scope.
 
-forward_traits_via_conversion! (Point -> [f32; 2], for <'a> TryFrom <&'a [f32]>, IntoIterator);
+forward_traits! (for Point -> [f32; 2] impl for <'a> TryFrom <&'a [f32]> + IntoIterator);
 
 // Now we can do weird stuff, life try to construct Point from slices.
 
@@ -488,90 +606,7 @@ Point::try_from ([1f32, 2f32] . as_slice ()) . unwrap () . into_iter ();
 Point::try_from ([1f32] . as_slice ()) . unwrap_err ();
 ```
 
-# Conversions
-
-Up to 4 different conversions may be used.  If `BaseType` were to forward an
-implementation by `DelegatedType`, those conversions would be:
-
- * `<BaseType as std::convert::AsRef <DelegatedType>>::borrow ()` for function
- arguments of type `&Self`.
-
- * `<BaseType as std::convert::AsMut <DelegatedType>>::borrow_mut ()` for
- function arguments of type `&mut Self`.
-
- * `<BaseType as std::convert::Into <DelegatedType>>::into ()` for function
- arguments of type `Self`.
-
- * `<BaseType as std::convert::From <DelegatedType>>::from ()` for a return type
- of `Self`.
-
-Any conversion that is actually used to forward a trait implementation will need
-to be implemented for the receiving type.  Any conversion that is not used does
-not need to be implemented.
-
-In practice, if a trait implementation would only use borrowing conversions, it
-might make more sense to use a member forward instead, as that doesn't require
-that the receiver type implement any conversion traits.
-
-Note that forwarding via conversion is the only way to forward a trait that has
-a method that returns `Self` in any form.
-
-All arguments to a trait method that have a type of some form of self are
-converted, not just the method receiver.  This also allows traits to be
-forwarded that require/provide methods that don't take a receiver, but still
-take arguments of the receiver type.
-
-Self types in container types like `Result` and `Box` are also converted.
-
-*/
-#[proc_macro]
-pub fn forward_traits_via_conversion (input: TokenStream) -> TokenStream
-{
-	forward_via_conversion::forward_traits_via_conversion_impl (input)
-}
-
-#[doc (hidden)]
-#[proc_macro]
-pub fn __forward_trait_via_member (input: TokenStream) -> TokenStream
-{
-	forward_via_member::__forward_trait_via_member_impl (input)
-}
-
-/**
-
-This macro generates trait implementations for a type where a member of that
-type implements the trait.
-
-# Usage
-
-The first argument to the macro is a specification of which member should
-provide the implementation of the forwarded trait.  This specification takes the
-form `BaseTypeIdent . member`, where `member` is either an identifier or an
-index, as appropriate for the type.
-
-The remaining arguments are descriptions of traits that should be forwarded.
-The trait generic arguments, if any, will be interpreted as if the generic
-parameters from the base type are in scope.
-
-If a trait would need additional generic arguments to be introduced in order to
-correctly specify the trait's generic parameters, these arguments can be
-provided by prefixing the trait path with a quantifier over those parameters.
-The syntax is similar to that of
-Higher-Ranked Trait Bounds, except that all forms of generic parameters are
-supported.  These parameters will be introduced into the `impl` scope along with
-the generic parameters of the receiver type, so make sure that their names don't
-collide with the receiver type's generic parameters.
-
-Additionally, if additional where predicates need to be provided on top of those
-found in the type definition and trait definition (and besides those which could
-be provided automatically by the forwarding macro), then those may also be
-introduced by suffixing the trait path with a where clause.  If a where clause
-is included, the where clause must be followed by a semicolon.
-
-Putting that all together, a description of a trait to be forwarded might look
-like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
-
-# Example
+Here we're just doing some boring member delegation.
 
 ```rust
 # use forward_traits::supply_forwarding_info_for_trait;
@@ -597,7 +632,7 @@ like this: `for <'a> path::to::Trait <&'a [T]> where T: 'a;`.
 # 	}
 # );
 #
-use forward_traits::{forward_receiver, forward_traits_via_member};
+use forward_traits::{forward_receiver, forward_traits};
 
 #[forward_receiver]
 struct Foo
@@ -606,24 +641,48 @@ struct Foo
 	items: Vec <u8>
 }
 
-forward_traits_via_member! (Foo . items, Index <usize>, IndexMut <usize>);
+forward_traits! (for Foo . items impl Index <usize> + IndexMut <usize>);
 ```
 
-# Conversions
+Here we're transforming more than one type at once, and we need to introduce a
+generic parameter in order to specify these additional transformations.
 
-Conversions are performed via member access.  Return types cannot be converted,
-as member access has no inverse.
+```rust
+use forward_traits::{forwardable, forward_receiver, forward_traits};
 
-All arguments to a trait method that have a type of some form of self are
-converted, not just the method receiver.  This also allows traits to be
-forwarded that require/provide methods that don't take a receiver, but still
-take arguments of the receiver type.
+struct Algebra {}
 
-Self types in container types like `Result` and `Box` are also converted.
+#[forwardable]
+trait Foo <T>
+{
+	fn foo (self, x: T);
+}
 
+impl <T> Foo <T> for Algebra
+{
+	fn foo (self, x: T) {}
+}
+
+struct Wrap <T> (T);
+
+#[forward_receiver]
+struct WrapAlgebra {}
+
+impl Into <Algebra> for WrapAlgebra
+{
+	fn into (self) -> Algebra
+	{
+		Algebra {}
+	}
+}
+
+forward_traits! (for <T> WrapAlgebra -> Algebra [Wrap <T> . 0: T] impl Foo <T>);
+
+WrapAlgebra {} . foo (Wrap::<f32> (1.0))
+```
 */
 #[proc_macro]
-pub fn forward_traits_via_member (input: TokenStream) -> TokenStream
+pub fn forward_traits (input: TokenStream) -> TokenStream
 {
-	forward_via_member::forward_traits_via_member_impl (input)
+	forward_traits::forward_traits_impl (input)
 }

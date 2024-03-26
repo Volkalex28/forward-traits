@@ -1,7 +1,7 @@
 use syn::{ItemStruct, Token, parse};
 use syn::parse::{Result, Error};
 
-use crate::uncurry::{uncurry_macro_ident, gen_uncurry_macro};
+use crate::uncurry::{get_macro_ident, gen_uncurry_macro};
 use crate::type_def_info::TypeDefInfo;
 
 fn try_forward_receiver_impl
@@ -13,7 +13,7 @@ fn try_forward_receiver_impl
 {
 	let ItemStruct {vis, ident, generics, fields, ..} = parse (item . clone ())?;
 
-	let macro_ident = uncurry_macro_ident (&ident);
+	let macro_ident = get_macro_ident (&ident);
 
 	let type_info = TypeDefInfo
 	{

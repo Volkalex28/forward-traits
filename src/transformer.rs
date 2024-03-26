@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use syn
 ::{
 	Ident,
@@ -19,6 +21,7 @@ use syn
 	ImplItemConst,
 	ImplItemFn,
 	ImplItemType,
+	WherePredicate,
 	Token,
 	parse_quote,
 	parse2
@@ -27,27 +30,68 @@ use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use quote::ToTokens;
 
-fn is_self (ty: &Type) -> bool
+use crate::value_transformer::ValueTransformer;
+
+pub struct Transformer
 {
-	*ty == parse_quote! (Self)
+	map: HashMap <Type, (Type, ValueTransformer)>
 }
 
-fn is_ref_self (ty: &Type) -> bool
+impl Transformer
 {
-	if let Type::Reference (ty_ref) = ty
+	pub fn new () -> Self
 	{
-		ty_ref . mutability . is_none () && is_self (&ty_ref . elem)
+		Self { map: HashMap::new () }
 	}
-	else { false }
-}
 
-fn is_ref_mut_self (ty: &Type) -> bool
-{
-	if let Type::Reference (ty_ref) = ty
+	pub fn add_transformation
+	(
+		&mut self,
+		from_type: Type,
+		to_type: Type,
+		value_transformer: ValueTransformer
+	)
 	{
-		ty_ref . mutability . is_some () && is_self (&ty_ref . elem)
+		self . map . insert (from_type, (to_type, value_transformer));
 	}
-	else { false }
+
+	fn get_transformer_for_type <'a, 'b> (&'a mut self, ty: &'b Type)
+	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	{
+		if let Some ((to_type, value_transformer)) = self . map . get_mut (ty)
+		{
+			Some ((ty, &*to_type, value_transformer))
+		}
+		else { None }
+	}
+
+	fn get_transformer_for_ref_type <'a, 'b> (&'a mut self, ty: &'b Type)
+	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	{
+		if let Type::Reference (ty_ref) = ty
+		{
+			if ty_ref . mutability . is_none ()
+			{
+				return self . get_transformer_for_type (&ty_ref . elem);
+			}
+		}
+
+		None
+	}
+
+	fn get_transformer_for_ref_mut_type <'a, 'b> (&'a mut self, ty: &'b Type)
+	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	{
+		if let Type::Reference (ty_ref) = ty
+		{
+			if ty_ref . mutability . is_some ()
+			{
+				return self . get_transformer_for_type (&ty_ref . elem);
+			}
+		}
+
+		None
+	}
 }
 
 fn get_leaf (ty: &Type)
@@ -103,57 +147,15 @@ define_is_container! (is_pin, "Pin");
 define_is_container! (is_rc, "Rc");
 define_is_container! (is_arc, "Arc");
 
-// I could make a lot of these functions immutable and private by making them
-// bare fns that take a trait item as the first argument.  Then the trait could
-// simply provide an implementation of the top-level user-facing function.
-// Dunno if that's what I actually want to do, though.
-
-pub trait Transformer
+impl Transformer
 {
-	fn transform_input_self
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		input_type: &Type
-	)
-	-> Result <Expr>;
-
-	fn transform_input_ref_self
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		input_type: &Type
-	)
-	-> Result <Expr>;
-
-	fn transform_input_ref_mut_self
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		input_type: &Type
-	)
-	-> Result <Expr>;
-
-	fn transform_input_result
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		inner_type: &Type
-	)
+	fn transform_input_result (&mut self, input: Expr, inner_type: &Type)
 	-> Result <(Expr, bool)>
 	{
 		let inner_input = parse_quote! (v);
 
-		if let (inner_input, true) = self . transform_input
-		(
-			delegated_type,
-			inner_input,
-			inner_type
-		)?
+		if let (inner_input, true) =
+			self . transform_input (inner_input, inner_type)?
 		{
 			let input = parse_quote!
 			(
@@ -166,23 +168,13 @@ pub trait Transformer
 		Ok ((input, false))
 	}
 
-	fn transform_input_box
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		inner_type: &Type
-	)
+	fn transform_input_box (&mut self, input: Expr, inner_type: &Type)
 	-> Result <(Expr, bool)>
 	{
 		let inner_input = parse_quote! (*#input);
 
-		if let (inner_input, true) = self . transform_input
-		(
-			delegated_type,
-			inner_input,
-			inner_type
-		)?
+		if let (inner_input, true) =
+			self . transform_input (inner_input, inner_type)?
 		{
 			let input = parse_quote!
 			(
@@ -195,125 +187,100 @@ pub trait Transformer
 		Ok ((input, false))
 	}
 
-	fn transform_input
-	(
-		&mut self,
-		delegated_type: &Type,
-		input: Expr,
-		input_type: &Type,
-	)
+	fn transform_input (&mut self, input: Expr, input_type: &Type)
 	-> Result <(Expr, bool)>
 	{
-		if is_self (input_type)
+		if let Some ((from_type, to_type, value_transformer)) =
+			self . get_transformer_for_type (input_type)
 		{
 			return Ok
 			((
-				self . transform_input_self
+				value_transformer . transform_input
 				(
-					delegated_type,
 					input,
-					input_type
+					from_type,
+					to_type
 				)?,
 				true
 			));
 		}
-		else if is_ref_self (input_type)
+		else if let Some ((from_type, to_type, value_transformer)) =
+			self . get_transformer_for_ref_type (input_type)
 		{
 			return Ok
 			((
-				self . transform_input_ref_self
+				value_transformer . transform_input_ref
 				(
-					delegated_type,
 					input,
-					input_type
+					from_type,
+					to_type
 				)?,
 				true
 			));
 		}
-		else if is_ref_mut_self (input_type)
+		else if let Some ((from_type, to_type, value_transformer)) =
+			self . get_transformer_for_ref_mut_type (input_type)
 		{
 			return Ok
 			((
-				self . transform_input_ref_mut_self
+				value_transformer . transform_input_ref_mut
 				(
-					delegated_type,
 					input,
-					input_type
+					from_type,
+					to_type
 				)?,
 				true
 			));
 		}
 		else if let Some (inner_type) = is_result (input_type)
 		{
-			return self . transform_input_result
-			(
-				delegated_type,
-				input,
-				inner_type
-			);
+			return self . transform_input_result (input, inner_type);
 		}
 		else if let Some (inner_type) = is_box (input_type)
 		{
-			return self . transform_input_box
-			(
-				delegated_type,
-				input,
-				inner_type
-			);
+			return self . transform_input_box (input, inner_type);
 		}
 		else if let Some (inner_type) = is_pin (input_type)
 		{
-			if let (_, true) = self . transform_input
-			(
-				delegated_type,
-				input . clone (),
-				inner_type
-			)?
+			if let (_, true) =
+				self . transform_input (input . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						input_type,
-						"Forwarding methods that take pinned forms of self is unsupported"
+						"Pinned argument values cannot be transformed for forwarding"
 					)
 				)
 			}
 		}
 		else if let Some (inner_type) = is_rc (input_type)
 		{
-			if let (_, true) = self . transform_input
-			(
-				delegated_type,
-				input . clone (),
-				inner_type
-			)?
+			if let (_, true) =
+				self . transform_input (input . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						input_type,
-						"Forwarding methods that take reference counting pointers to self is unsupported"
+						"Rc argument values cannot be transformed for forwarding"
 					)
 				);
 			}
 		}
 		else if let Some (inner_type) = is_arc (input_type)
 		{
-			if let (_, true) = self . transform_input
-			(
-				delegated_type,
-				input . clone (),
-				inner_type
-			)?
+			if let (_, true) =
+				self . transform_input (input . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						input_type,
-						"Forwarding methods that take reference counting pointers to self is unsupported"
+						"Arc argument values cannot be transformed for forwarding"
 					)
 				);
 			}
@@ -322,32 +289,13 @@ pub trait Transformer
 		Ok ((input, false))
 	}
 
-	fn transform_output_self
-	(
-		&mut self,
-		delegated_type: &Type,
-		output: Expr,
-		output_type: &Type
-	)
-	-> Result <Expr>;
-
-	fn transform_output_result
-	(
-		&mut self,
-		delegated_type: &Type,
-		output: Expr,
-		inner_type: &Type
-	)
+	fn transform_output_result (&mut self, output: Expr, inner_type: &Type)
 	-> Result <(Expr, bool)>
 	{
 		let inner_output = parse_quote! (v);
 
-		if let (inner_output, true) = self . transform_output
-		(
-			delegated_type,
-			inner_output,
-			inner_type
-		)?
+		if let (inner_output, true) =
+			self . transform_output (inner_output, inner_type)?
 		{
 			let output = parse_quote!
 			(
@@ -360,23 +308,13 @@ pub trait Transformer
 		Ok ((output, false))
 	}
 
-	fn transform_output_box
-	(
-		&mut self,
-		delegated_type: &Type,
-		output: Expr,
-		inner_type: &Type
-	)
+	fn transform_output_box (&mut self, output: Expr, inner_type: &Type)
 	-> Result <(Expr, bool)>
 	{
 		let inner_output = parse_quote! (*#output);
 
-		if let (inner_output, true) = self . transform_output
-		(
-			delegated_type,
-			inner_output,
-			inner_type
-		)?
+		if let (inner_output, true) =
+			self . transform_output (inner_output, inner_type)?
 		{
 			let output = parse_quote!
 			(
@@ -389,121 +327,95 @@ pub trait Transformer
 		Ok ((output, false))
 	}
 
-	fn transform_output
-	(
-		&mut self,
-		delegated_type: &Type,
-		output: Expr,
-		output_type: &Type
-	)
+	fn transform_output (&mut self, output: Expr, output_type: &Type)
 	-> Result <(Expr, bool)>
 	{
-		if is_self (output_type)
+		if let Some ((from_type, to_type, value_transformer)) =
+			self . get_transformer_for_type (output_type)
 		{
 			return Ok
 			((
-				self . transform_output_self
+				value_transformer . transform_output
 				(
-					delegated_type,
 					output,
-					output_type
+					from_type,
+					to_type
 				)?,
 				true
 			));
 		}
-		else if is_ref_self (output_type)
+		else if let Some (_) = self . get_transformer_for_ref_type (output_type)
 		{
 			return Err
 			(
 				Error::new_spanned
 				(
 					output_type,
-					"Methods that return `&Self` cannot be forwarded"
+					"Borrowed return values cannot be transformed for forwarding"
 				)
 			);
 		}
-		else if is_ref_mut_self (output_type)
+		else if let Some (_) =
+			self . get_transformer_for_ref_mut_type (output_type)
 		{
 			return Err
 			(
 				Error::new_spanned
 				(
 					output_type,
-					"Methods that return `&mut Self` cannot be forwarded"
+					"Borrowed return values cannot be transformed for forwarding"
 				)
 			);
 		}
 		else if let Some (inner_type) = is_result (output_type)
 		{
-			return self . transform_output_result
-			(
-				delegated_type,
-				output,
-				inner_type
-			);
+			return self . transform_output_result (output, inner_type);
 		}
 		else if let Some (inner_type) = is_box (output_type)
 		{
-			return self . transform_output_box
-			(
-				delegated_type,
-				output,
-				inner_type
-			);
+			return self . transform_output_box (output, inner_type);
 		}
 		else if let Some (inner_type) = is_pin (output_type)
 		{
-			if let (_output, true) = self . transform_output
-			(
-				delegated_type,
-				output . clone (),
-				inner_type
-			)?
+			if let (_output, true) =
+				self . transform_output (output . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						output_type,
-						"Methods that return any pinned form of self cannot be forwarded"
+						"Pinned return values cannot be transformed for forwarding"
 					)
 				);
 			}
 		}
 		else if let Some (inner_type) = is_rc (output_type)
 		{
-			if let (_output, true) = self . transform_output
-			(
-				delegated_type,
-				output . clone (),
-				inner_type
-			)?
+			if let (_output, true) =
+				self . transform_output (output . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						output_type,
-						"Methods that return any reference counted pointers to self cannot be forwarded"
+						"Rc return values cannot be transformed for forwarding"
 					)
 				);
 			}
 		}
 		else if let Some (inner_type) = is_arc (output_type)
 		{
-			if let (_output, true) = self . transform_output
-			(
-				delegated_type,
-				output . clone (),
-				inner_type
-			)?
+			if let (_output, true) =
+				self . transform_output (output . clone (), inner_type)?
 			{
 				return Err
 				(
 					Error::new_spanned
 					(
 						output_type,
-						"Methods that return any reference counted pointers to self cannot be forwarded"
+						"Arc return values cannot be transformed for forwarding"
 					)
 				);
 			}
@@ -512,8 +424,7 @@ pub trait Transformer
 		Ok ((output, false))
 	}
 
-	fn construct_arg (&mut self, delegated_type: &Type, input: &FnArg)
-	-> Result <Expr>
+	fn construct_arg (&mut self, input: &FnArg) -> Result <Expr>
 	{
 		match input
 		{
@@ -523,7 +434,6 @@ pub trait Transformer
 
 				let arg = self . transform_input
 				(
-					delegated_type,
 					parse_quote! (#self_token),
 					ty . as_ref ()
 				)?
@@ -537,7 +447,6 @@ pub trait Transformer
 
 				let arg = self . transform_input
 				(
-					delegated_type,
 					parse2 (pat . to_token_stream ())?,
 					ty . as_ref ()
 				)?
@@ -601,7 +510,7 @@ pub trait Transformer
 		let mut args = Punctuated::<Expr, Token! [,]>::new ();
 		for input in &inputs
 		{
-			args . push (self . construct_arg (delegated_type, input)?);
+			args . push (self . construct_arg (input)?);
 		}
 
 		let call_expr = parse_quote!
@@ -611,7 +520,7 @@ pub trait Transformer
 
 		let body_expr = if let ReturnType::Type (_, boxed_ty) = &output
 		{
-			self . transform_output (delegated_type, call_expr, boxed_ty . as_ref ())? . 0
+			self . transform_output (call_expr, boxed_ty . as_ref ())? . 0
 		}
 		else
 		{
@@ -657,7 +566,7 @@ pub trait Transformer
 		item_const
 	}
 
-	fn transform_item
+	pub fn transform_item
 	(
 		&mut self,
 		delegated_type: &Type,
@@ -712,6 +621,18 @@ pub trait Transformer
 					"Forwarding trait items of this type is not supported"
 				)
 			)
+		}
+	}
+
+	pub fn add_predicates
+	(
+		&self,
+		predicates: &mut Punctuated <WherePredicate, Token! [,]>
+	)
+	{
+		for (from_type, (to_type, value_transformer)) in &self . map
+		{
+			value_transformer . add_predicates (predicates, from_type, to_type);
 		}
 	}
 }

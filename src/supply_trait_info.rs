@@ -3,7 +3,7 @@ use syn::parse::{Result, Error};
 use syn_derive::Parse;
 use quote::quote;
 
-use crate::uncurry::{uncurry_macro_ident, get_trait_ident, gen_uncurry_macro};
+use crate::uncurry::{get_macro_ident, get_path_ident, gen_uncurry_macro};
 use crate::trait_def_info::TraitDefInfo;
 
 #[derive (Parse)]
@@ -32,7 +32,7 @@ fn try_supply_forwarding_info_for_trait_impl (input: proc_macro::TokenStream)
 	let uncurry_macro = gen_uncurry_macro
 	(
 		visibility,
-		uncurry_macro_ident (&get_trait_ident (&forwarded_trait)?),
+		get_macro_ident (&get_path_ident (&forwarded_trait)?),
 		trait_def_info
 	);
 
