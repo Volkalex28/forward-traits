@@ -8,6 +8,7 @@ use quote::{quote, ToTokens};
 use crate::generics::combine_generics;
 use crate::partial_eval::get_evaluator;
 use crate::mangle::mangle_generics;
+use crate::type_transformer::TypeTransformer;
 
 use crate::base_transform_info::BaseTransformInfo;
 use crate::additional_transform_infos::AdditionalTransformInfos;
@@ -177,6 +178,8 @@ fn try_forward_trait_impl (input: proc_macro::TokenStream)
 		base_value_transformer
 	);
 
+	let mut type_transformer = TypeTransformer::new ();
+
 	for additional_transform_info
 	in type_transform_info . additional_transform_infos
 	{
@@ -188,11 +191,16 @@ fn try_forward_trait_impl (input: proc_macro::TokenStream)
 
 		transformer . add_transformation
 		(
-			from_type,
-			to_type,
+			from_type . clone (),
+			to_type . clone (),
 			value_transformer
 		);
+
+		type_transformer . transformations . insert (from_type, to_type);
 	}
+
+	let transformed_forwarded_trait =
+		type_transformer . fold_path (forwarded_trait . clone ());
 
 	let mut evaluator =
 		get_evaluator (trait_def_info . generics, &forwarded_trait)?;
@@ -210,7 +218,7 @@ fn try_forward_trait_impl (input: proc_macro::TokenStream)
 			transformer . transform_item
 			(
 				&delegated_type,
-				&forwarded_trait,
+				&transformed_forwarded_trait,
 				item
 			)?
 		);
@@ -218,7 +226,10 @@ fn try_forward_trait_impl (input: proc_macro::TokenStream)
 
 	{
 		let predicates = &mut generics . make_where_clause () . predicates;
-		predicates . push (parse_quote! (#delegated_type: #forwarded_trait));
+		predicates . push
+		(
+			parse_quote! (#delegated_type: #transformed_forwarded_trait)
+		);
 		transformer . add_predicates (predicates);
 	}
 

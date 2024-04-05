@@ -30,7 +30,7 @@ forward_traits!
 (
 	for <T> WrapAlgebra -> Algebra [Wrap <T> . 0: T]
 	where Wrap <T>: Sized
-	impl Foo <T>
+	impl Foo <Wrap <T>>
 );
 
 fn main ()

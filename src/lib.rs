@@ -166,6 +166,7 @@ mod generics;
 
 mod partial_eval;
 mod mangle;
+mod type_transformer;
 
 mod uncurry;
 
@@ -676,7 +677,11 @@ impl Into <Algebra> for WrapAlgebra
 	}
 }
 
-forward_traits! (for <T> WrapAlgebra -> Algebra [Wrap <T> . 0: T] impl Foo <T>);
+forward_traits!
+(
+	for <T> WrapAlgebra -> Algebra [Wrap <T> . 0: T]
+	impl Foo <Wrap <T>>
+);
 
 WrapAlgebra {} . foo (Wrap::<f32> (1.0))
 ```
