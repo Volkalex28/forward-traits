@@ -162,41 +162,17 @@ VecWrapper (vec! (1, 2, 3)) . into_iter ();
 
 */
 
-mod generics;
-
-mod partial_eval;
-mod mangle;
-mod type_transformer;
-
 mod uncurry;
 
-mod transform_use;
+mod generics;
+mod syn;
+mod fold;
 
-mod type_def_info;
-mod trait_def_info;
-mod forwarded_trait_info;
-
-mod member;
-
-mod conversion_transformer;
-mod member_transformer;
 mod value_transformer;
+mod type_transformer;
 mod transformer;
 
-mod base_conversion_transform_info;
-mod base_member_transform_info;
-mod base_transform_info;
-
-mod conversion_transform_info;
-mod member_transform_info;
-mod transform_info;
-mod additional_transform_infos;
-
-mod forwardable;
-mod supply_trait_info;
-mod forward_receiver;
-
-mod forward_traits;
+mod macros;
 
 use proc_macro::TokenStream;
 
@@ -264,7 +240,7 @@ re-export is used in the forwarding macro.
 #[proc_macro_attribute]
 pub fn forwardable (attr: TokenStream, item: TokenStream) -> TokenStream
 {
-	forwardable::forwardable_impl (attr, item)
+	macros::forwardable::forwardable_impl (attr, item)
 }
 
 /**
@@ -318,7 +294,7 @@ enum Foo
 #[proc_macro_attribute]
 pub fn forward_receiver (attr: TokenStream, item: TokenStream) -> TokenStream
 {
-	forward_receiver::forward_receiver_impl (attr, item)
+	macros::forward_receiver::forward_receiver_impl (attr, item)
 }
 
 /**
@@ -389,14 +365,14 @@ supply_forwarding_info_for_trait!
 #[proc_macro]
 pub fn supply_forwarding_info_for_trait (input: TokenStream) -> TokenStream
 {
-	supply_trait_info::supply_forwarding_info_for_trait_impl (input)
+	macros::supply_trait_info::supply_forwarding_info_for_trait_impl (input)
 }
 
 #[doc (hidden)]
 #[proc_macro]
 pub fn __forward_trait (input: TokenStream) -> TokenStream
 {
-	forward_traits::__forward_trait_impl (input)
+	macros::forward_traits::__forward_trait_impl (input)
 }
 
 /**
@@ -689,5 +665,5 @@ WrapAlgebra {} . foo (Wrap::<f32> (1.0))
 #[proc_macro]
 pub fn forward_traits (input: TokenStream) -> TokenStream
 {
-	forward_traits::forward_traits_impl (input)
+	macros::forward_traits::forward_traits_impl (input)
 }

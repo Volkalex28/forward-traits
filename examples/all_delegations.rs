@@ -3,22 +3,41 @@ use std::convert::{AsRef, AsMut};
 use forward_traits::{forwardable, forward_receiver, forward_traits};
 
 #[forwardable]
-trait Foo
+trait Foo: Sized
 {
 	fn foo1 (self);
 	fn foo2 (&self);
 	fn foo3 (&mut self);
 	fn foo4 () -> Self;
+	fn foo5 () -> Box <Self>;
+	fn foo6 () -> Result <Self, ()>;
 }
 
-struct A {}
+#[forwardable]
+trait Bar
+{
+	fn bar1 (self);
+	fn bar2 (&self);
+	fn bar3 (&mut self);
+}
+
+struct A;
 
 impl Foo for A
 {
 	fn foo1 (self) {}
 	fn foo2 (&self) {}
 	fn foo3 (&mut self) {}
-	fn foo4 () -> Self { A {} }
+	fn foo4 () -> Self { A }
+	fn foo5 () -> Box <Self> { Box::new (A) }
+	fn foo6 () -> Result <Self, ()> { Ok (A) }
+}
+
+impl Bar for A
+{
+	fn bar1 (self) {}
+	fn bar2 (&self) {}
+	fn bar3 (&mut self) {}
 }
 
 #[forward_receiver]
@@ -57,6 +76,7 @@ impl AsMut <A> for B
 }
 
 forward_traits! (for B -> A impl Foo);
+forward_traits! (for B . 0 impl Bar);
 
 fn main ()
 {

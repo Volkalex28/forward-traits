@@ -2,7 +2,7 @@ use syn::{Lifetime, Ident, Generics, GenericParam, parse_quote};
 use syn::fold::Fold;
 use quote::format_ident;
 
-use crate::partial_eval::PartialEval;
+use super::partial_eval::PartialEval;
 
 pub fn mangle_ident (ident: &Ident) -> Ident
 {

@@ -2,7 +2,7 @@ use syn::{ItemStruct, Token, parse};
 use syn::parse::{Result, Error};
 
 use crate::uncurry::{get_macro_ident, gen_uncurry_macro};
-use crate::type_def_info::TypeDefInfo;
+use crate::syn::type_def_info::TypeDefInfo;
 
 fn try_forward_receiver_impl
 (

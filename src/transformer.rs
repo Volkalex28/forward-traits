@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use syn
 ::{
 	Ident,
@@ -28,45 +26,110 @@ use syn
 };
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
+use syn::fold::Fold;
 use quote::ToTokens;
 
-use crate::value_transformer::ValueTransformer;
+use crate::value_transformer::value_transformer::ValueTransformer;
 
+use crate::type_transformer
+::{
+	associated_type_transformer::*,
+	independent_type_transformer::*,
+	additional_type_transformer::*
+};
+
+pub struct TransformerBuilder
+{
+	associated_type_transformers: AssociatedTypeTransformers,
+	independent_type_transformers: IndependentTypeTransformers
+}
+
+impl TransformerBuilder
+{
+	pub fn new () -> Self
+	{
+		Self
+		{
+			associated_type_transformers: AssociatedTypeTransformers::new (),
+			independent_type_transformers: IndependentTypeTransformers::new ()
+		}
+	}
+
+	pub fn add_independent_type_transformer
+	(
+		&mut self,
+		independent_type_transformer: IndependentTypeTransformer
+	)
+	{
+		self
+			. independent_type_transformers
+			. insert (independent_type_transformer);
+	}
+
+	pub fn add_additional_type_transformer
+	(
+		&mut self,
+		additional_type_transformer: AdditionalTypeTransformer
+	)
+	{
+		match additional_type_transformer . specialize ()
+		{
+			SpecializedTypeTransformer::Independent (independent_type_transformer) =>
+				self . independent_type_transformers . insert (independent_type_transformer),
+			SpecializedTypeTransformer::Associated (associated_type_transformer) =>
+				self . associated_type_transformers . insert (associated_type_transformer)
+		}
+	}
+
+	pub fn into_transformer (self, delegated_type: Type, forwarded_trait: Path)
+	-> Transformer
+	{
+		let Self {associated_type_transformers, independent_type_transformers} = self;
+
+		let forwarded_trait = independent_type_transformers
+			. get_type_transformer ()
+			. fold_path (forwarded_trait);
+
+		Transformer
+		{
+			associated_type_transformers,
+			independent_type_transformers,
+			delegated_type,
+			forwarded_trait
+		}
+	}
+}
+
+// This type should probably be the type that is able to transform the forwarded
+// trait info.  The type transformer object should be modified so that it can
+// somehow take advantage of the existing type_transformers mapping or
+// something.
 pub struct Transformer
 {
-	map: HashMap <Type, (Type, ValueTransformer)>
+	associated_type_transformers: AssociatedTypeTransformers,
+	independent_type_transformers: IndependentTypeTransformers,
+	delegated_type: Type,
+	forwarded_trait: Path
 }
 
 impl Transformer
 {
-	pub fn new () -> Self
+	pub fn get_transformed_forwarded_trait (&self) -> &Path
 	{
-		Self { map: HashMap::new () }
-	}
-
-	pub fn add_transformation
-	(
-		&mut self,
-		from_type: Type,
-		to_type: Type,
-		value_transformer: ValueTransformer
-	)
-	{
-		self . map . insert (from_type, (to_type, value_transformer));
+		&self . forwarded_trait
 	}
 
 	fn get_transformer_for_type <'a, 'b> (&'a mut self, ty: &'b Type)
-	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	-> Option <(&'b Type, Type, &'a mut ValueTransformer)>
 	{
-		if let Some ((to_type, value_transformer)) = self . map . get_mut (ty)
-		{
-			Some ((ty, &*to_type, value_transformer))
-		}
-		else { None }
+		self
+			. associated_type_transformers
+			. get_transformation (ty, &self . delegated_type, &self . forwarded_trait)
+			. or (self . independent_type_transformers . get_transformation (ty))
 	}
 
 	fn get_transformer_for_ref_type <'a, 'b> (&'a mut self, ty: &'b Type)
-	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	-> Option <(&'b Type, Type, &'a mut ValueTransformer)>
 	{
 		if let Type::Reference (ty_ref) = ty
 		{
@@ -80,7 +143,7 @@ impl Transformer
 	}
 
 	fn get_transformer_for_ref_mut_type <'a, 'b> (&'a mut self, ty: &'b Type)
-	-> Option <(&'b Type, &'a Type, &'a mut ValueTransformer)>
+	-> Option <(&'b Type, Type, &'a mut ValueTransformer)>
 	{
 		if let Type::Reference (ty_ref) = ty
 		{
@@ -187,7 +250,12 @@ impl Transformer
 		Ok ((input, false))
 	}
 
-	fn transform_input (&mut self, input: Expr, input_type: &Type)
+	fn transform_input
+	(
+		&mut self,
+		input: Expr,
+		input_type: &Type
+	)
 	-> Result <(Expr, bool)>
 	{
 		if let Some ((from_type, to_type, value_transformer)) =
@@ -199,7 +267,7 @@ impl Transformer
 				(
 					input,
 					from_type,
-					to_type
+					&to_type
 				)?,
 				true
 			));
@@ -213,7 +281,7 @@ impl Transformer
 				(
 					input,
 					from_type,
-					to_type
+					&to_type
 				)?,
 				true
 			));
@@ -227,7 +295,7 @@ impl Transformer
 				(
 					input,
 					from_type,
-					to_type
+					&to_type
 				)?,
 				true
 			));
@@ -339,7 +407,7 @@ impl Transformer
 				(
 					output,
 					from_type,
-					to_type
+					&to_type
 				)?,
 				true
 			));
@@ -457,38 +525,34 @@ impl Transformer
 		}
 	}
 
-	fn transform_item_type
-	(
-		&mut self,
-		delegated_type: &Type,
-		forwarded_trait: &Path,
-		item_type: TraitItemType
-	)
+	fn transform_item_type (&self, item_type: TraitItemType)
 	-> Result <ImplItemType>
 	{
 		let TraitItemType {ident, generics, ..} = item_type;
 
-		let (impl_generics, type_generics, where_clause) =
+		let (impl_generics, _, where_clause) =
 			generics . split_for_impl ();
+
+		let assigned_type = self
+			. associated_type_transformers
+			. get_assigned_type
+			(
+				&ident,
+				&generics,
+				&self . delegated_type,
+				&self . forwarded_trait
+			)?;
 
 		let item_type = parse_quote!
 		{
-			type #ident #impl_generics =
-				<#delegated_type as #forwarded_trait>::#ident #type_generics
+			type #ident #impl_generics = #assigned_type
 			#where_clause;
 		};
 
 		Ok (item_type)
 	}
 
-	fn transform_item_fn
-	(
-		&mut self,
-		delegated_type: &Type,
-		forwarded_trait: &Path,
-		item_fn: TraitItemFn
-	)
-	-> Result <ImplItemFn>
+	fn transform_item_fn (&mut self, item_fn: TraitItemFn) -> Result <ImplItemFn>
 	{
 		let TraitItemFn
 		{
@@ -513,10 +577,15 @@ impl Transformer
 			args . push (self . construct_arg (input)?);
 		}
 
-		let call_expr = parse_quote!
-		(
-			<#delegated_type as #forwarded_trait>::#ident (#args)
-		);
+		let call_expr =
+		{
+			let Self {delegated_type, forwarded_trait, ..} = &*self;
+
+			parse_quote!
+			(
+				<#delegated_type as #forwarded_trait>::#ident (#args)
+			)
+		};
 
 		let body_expr = if let ReturnType::Type (_, boxed_ty) = &output
 		{
@@ -542,15 +611,11 @@ impl Transformer
 		Ok (item_fn)
 	}
 
-	fn transform_item_const
-	(
-		&mut self,
-		delegated_type: &Type,
-		forwarded_trait: &Path,
-		item_const: TraitItemConst
-	)
+	fn transform_item_const (&self, item_const: TraitItemConst)
 	-> ImplItemConst
 	{
+		let Self {delegated_type, forwarded_trait, ..} = self;
+
 		let TraitItemConst {ident, generics, ty, ..} = item_const;
 
 		let (impl_generics, type_generics, where_clause) =
@@ -566,52 +631,22 @@ impl Transformer
 		item_const
 	}
 
-	pub fn transform_item
-	(
-		&mut self,
-		delegated_type: &Type,
-		forwarded_trait: &Path,
-		item: TraitItem
-	)
+	pub fn transform_trait_item (&mut self, item: TraitItem)
 	-> Result <ImplItem>
 	{
 		match item
 		{
 			TraitItem::Const (item_const) => Ok
 			(
-				ImplItem::Const
-				(
-					self . transform_item_const
-					(
-						delegated_type,
-						forwarded_trait,
-						item_const
-					)
-				)
+				ImplItem::Const (self . transform_item_const (item_const))
 			),
 			TraitItem::Fn (item_fn) => Ok
 			(
-				ImplItem::Fn
-				(
-					self . transform_item_fn
-					(
-						delegated_type,
-						forwarded_trait,
-						item_fn
-					)?
-				)
+				ImplItem::Fn (self . transform_item_fn (item_fn)?)
 			),
 			TraitItem::Type (item_type) => Ok
 			(
-				ImplItem::Type
-				(
-					self . transform_item_type
-					(
-						delegated_type,
-						forwarded_trait,
-						item_type
-					)?
-				)
+				ImplItem::Type (self . transform_item_type (item_type)?)
 			),
 			_ => Err
 			(
@@ -630,9 +665,13 @@ impl Transformer
 		predicates: &mut Punctuated <WherePredicate, Token! [,]>
 	)
 	{
-		for (from_type, (to_type, value_transformer)) in &self . map
-		{
-			value_transformer . add_predicates (predicates, from_type, to_type);
-		}
+		self . associated_type_transformers . add_predicates
+		(
+			predicates,
+			&self . delegated_type,
+			&self . forwarded_trait
+		);
+
+		self . independent_type_transformers . add_predicates (predicates);
 	}
 }

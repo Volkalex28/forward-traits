@@ -5,8 +5,8 @@ use syn_derive::Parse;
 use quote::ToTokens;
 
 use crate::uncurry::{get_macro_ident, gen_uncurry_macro};
-use crate::transform_use::TransformUse;
-use crate::trait_def_info::TraitDefInfo;
+use crate::syn::trait_def_info::TraitDefInfo;
+use crate::fold::transform_use::TransformUse;
 
 #[derive (Parse)]
 #[parse (

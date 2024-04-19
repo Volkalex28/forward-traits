@@ -4,7 +4,7 @@ use syn_derive::Parse;
 use quote::quote;
 
 use crate::uncurry::{get_macro_ident, get_path_ident, gen_uncurry_macro};
-use crate::trait_def_info::TraitDefInfo;
+use crate::syn::trait_def_info::TraitDefInfo;
 
 #[derive (Parse)]
 struct SupplyForwardingInfoForTrait

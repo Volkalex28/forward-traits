@@ -1,4 +1,4 @@
-use syn::{Type, Expr, WherePredicate, Token, parse_quote};
+use syn::{Type, Expr, WherePredicate, BoundLifetimes, Token, parse_quote};
 use syn::punctuated::Punctuated;
 use syn::Result;
 
@@ -106,6 +106,7 @@ impl ConversionTransformer
 	(
 		&self,
 		predicates: &mut Punctuated <WherePredicate, Token! [,]>,
+		lifetimes: &Option <BoundLifetimes>,
 		from_type: &Type,
 		to_type: &Type
 	)
@@ -114,7 +115,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#from_type: std::convert::Into <#to_type>)
+				parse_quote! (#lifetimes #from_type: std::convert::Into <#to_type>)
 			);
 		}
 
@@ -122,7 +123,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#from_type: std::convert::AsRef <#to_type>)
+				parse_quote! (#lifetimes #from_type: std::convert::AsRef <#to_type>)
 			);
 		}
 
@@ -130,7 +131,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#from_type: std::convert::AsMut <#to_type>)
+				parse_quote! (#lifetimes #from_type: std::convert::AsMut <#to_type>)
 			);
 		}
 
@@ -138,7 +139,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#from_type: std::convert::From <#to_type>)
+				parse_quote! (#lifetimes #from_type: std::convert::From <#to_type>)
 			);
 		}
 	}

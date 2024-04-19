@@ -6,24 +6,28 @@ use syn_derive::Parse;
 use quote::{quote, ToTokens};
 
 use crate::generics::combine_generics;
-use crate::partial_eval::get_evaluator;
-use crate::mangle::mangle_generics;
-use crate::type_transformer::TypeTransformer;
 
-use crate::base_transform_info::BaseTransformInfo;
-use crate::additional_transform_infos::AdditionalTransformInfos;
-use crate::forwarded_trait_info::ForwardedTraitInfo;
-use crate::type_def_info::TypeDefInfo;
-use crate::trait_def_info::TraitDefInfo;
+use crate::syn
+::{
+	trait_def_info::TraitDefInfo,
+	type_def_info::TypeDefInfo,
+	forwarded_trait_info::ForwardedTraitInfo,
+	additional_type_transformers::AdditionalTypeTransformers
+};
 
-use crate::transformer::Transformer;
+use crate::fold::mangle::mangle_generics;
+use crate::fold::evaluator::get_trait_path_evaluator;
+
+use crate::type_transformer::base_type_transformer::BaseTypeTransformer;
+
+use crate::transformer::TransformerBuilder;
 
 struct TypeTransformInfo
 {
 	for_token: Token! [for],
 	generics: Generics,
-	base_transform_info: BaseTransformInfo,
-	additional_transform_infos: AdditionalTransformInfos
+	base_type_transformer: BaseTypeTransformer,
+	additional_type_transformers: AdditionalTypeTransformers
 }
 
 impl Parse for TypeTransformInfo
@@ -34,9 +38,9 @@ impl Parse for TypeTransformInfo
 
 		let mut generics: Generics = input . parse ()?;
 
-		let base_transform_info = input . parse ()?;
+		let base_type_transformer = input . parse ()?;
 
-		let additional_transform_infos = input . parse ()?;
+		let additional_type_transformers = input . parse ()?;
 
 		generics . where_clause = input . parse ()?;
 
@@ -44,8 +48,8 @@ impl Parse for TypeTransformInfo
 		{
 			for_token,
 			generics,
-			base_transform_info,
-			additional_transform_infos
+			base_type_transformer,
+			additional_type_transformers
 		};
 
 		Ok (type_transform_info)
@@ -58,8 +62,8 @@ impl ToTokens for TypeTransformInfo
 	{
 		self . for_token . to_tokens (tokens);
 		self . generics . to_tokens (tokens);
-		self . base_transform_info . to_tokens (tokens);
-		self . additional_transform_infos . to_tokens (tokens);
+		self . base_type_transformer . to_tokens (tokens);
+		self . additional_type_transformers . to_tokens (tokens);
 		self . generics . where_clause . to_tokens (tokens);
 	}
 }
@@ -87,7 +91,7 @@ fn try_forward_traits_impl (input: proc_macro::TokenStream)
 		= parse (input)?;
 
 	let base_type_macro_ident =
-		type_transform_info . base_transform_info . get_type_macro_ident ();
+		type_transform_info . base_type_transformer . get_type_macro_ident ();
 
 	let mut tokens = proc_macro2::TokenStream::new ();
 
@@ -159,70 +163,57 @@ fn try_forward_trait_impl (input: proc_macro::TokenStream)
 	let forwarded_trait =
 		mangler . fold_path (forwarded_trait_info . trait_path);
 
-	let mut transformer = Transformer::new ();
+	let mut transformer_builder = TransformerBuilder::new ();
 
-	let (base_type, delegated_type, base_value_transformer) =
-		type_transform_info . base_transform_info . into_value_transformer
+	// The name of this method sucks, in context.
+	let (base_type, delegated_type, independent_type_transformer) =
+		type_transform_info . base_type_transformer . into_type_transformer
 		(
 			&type_def_info . generics,
 			&type_def_info . fields
 		)?;
 
+	let independent_type_transformer = mangler
+		. fold_independent_type_transformer (independent_type_transformer);
 	let base_type = mangler . fold_type (base_type);
 	let delegated_type = mangler . fold_type (delegated_type);
 
-	transformer . add_transformation
+	transformer_builder . add_independent_type_transformer
 	(
-		parse_quote! (Self),
-		delegated_type . clone (),
-		base_value_transformer
+		independent_type_transformer
 	);
 
-	let mut type_transformer = TypeTransformer::new ();
-
-	for additional_transform_info
-	in type_transform_info . additional_transform_infos
+	for additional_type_transformer
+	in type_transform_info . additional_type_transformers
 	{
-		let (from_type, to_type, value_transformer) =
-			additional_transform_info . into_value_transformer ();
-
-		let from_type = mangler . fold_type (from_type);
-		let to_type = mangler . fold_type (to_type);
-
-		transformer . add_transformation
-		(
-			from_type . clone (),
-			to_type . clone (),
-			value_transformer
-		);
-
-		type_transformer . transformations . insert (from_type, to_type);
+		let additional_type_transformer =
+			mangler . fold_additional_type_transformer (additional_type_transformer);
+		transformer_builder . add_additional_type_transformer (additional_type_transformer);
 	}
 
-	let transformed_forwarded_trait =
-		type_transformer . fold_path (forwarded_trait . clone ());
+	let mut transformer = transformer_builder . into_transformer
+	(
+		delegated_type . clone (),
+		forwarded_trait . clone ()
+	);
 
 	let mut evaluator =
-		get_evaluator (trait_def_info . generics, &forwarded_trait)?;
+		get_trait_path_evaluator (trait_def_info . generics, &forwarded_trait)?;
 
 	let mut items = Vec::new ();
 
-	for item
-	in trait_def_info
+	for item in trait_def_info
 		. items
 		. into_iter ()
 		. map (|item| evaluator . fold_trait_item (item))
 	{
-		items . push
-		(
-			transformer . transform_item
-			(
-				&delegated_type,
-				&transformed_forwarded_trait,
-				item
-			)?
-		);
+		items . push (transformer . transform_trait_item (item)?);
 	}
+
+	// The transformer transforms the forwarded trait as a side-effect of being
+	// constructed.
+	let transformed_forwarded_trait =
+		transformer . get_transformed_forwarded_trait ();
 
 	{
 		let predicates = &mut generics . make_where_clause () . predicates;

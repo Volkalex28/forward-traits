@@ -1,9 +1,9 @@
-use syn::{Type, Expr, WherePredicate, Token};
+use syn::{Type, Expr, WherePredicate, BoundLifetimes, Token};
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 
-use crate::conversion_transformer::ConversionTransformer;
-use crate::member_transformer::MemberTransformer;
+use super::conversion_transformer::ConversionTransformer;
+use super::member_transformer::MemberTransformer;
 
 pub enum ValueTransformer
 {
@@ -111,6 +111,7 @@ impl ValueTransformer
 	(
 		&self,
 		predicates: &mut Punctuated <WherePredicate, Token! [,]>,
+		lifetimes: &Option <BoundLifetimes>,
 		from_type: &Type,
 		to_type: &Type
 	)
@@ -118,7 +119,7 @@ impl ValueTransformer
 		match self
 		{
 			Self::Conversion (conversion_transformer) => conversion_transformer
-				. add_predicates (predicates, from_type, to_type),
+				. add_predicates (predicates, lifetimes, from_type, to_type),
 			Self::Member (_member_transformer) => {}
 		}
 	}

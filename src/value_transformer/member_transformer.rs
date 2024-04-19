@@ -1,7 +1,7 @@
 use syn::{Expr, parse_quote};
 use syn::parse::Result;
 
-use crate::member::Member;
+use crate::syn::member::Member;
 
 pub struct MemberTransformer
 {
