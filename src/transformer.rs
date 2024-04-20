@@ -4,8 +4,6 @@ use syn
 	Type,
 	Expr,
 	Path,
-	PathArguments,
-	GenericArgument,
 	Signature,
 	FnArg,
 	Receiver,
@@ -20,6 +18,7 @@ use syn
 	ImplItemFn,
 	ImplItemType,
 	WherePredicate,
+	Index,
 	Token,
 	parse_quote,
 	parse2
@@ -28,6 +27,8 @@ use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use syn::fold::Fold;
 use quote::ToTokens;
+
+use crate::syn::transformable_types::*;
 
 use crate::value_transformer::value_transformer::ValueTransformer;
 
@@ -100,10 +101,6 @@ impl TransformerBuilder
 	}
 }
 
-// This type should probably be the type that is able to transform the forwarded
-// trait info.  The type transformer object should be modified so that it can
-// somehow take advantage of the existing type_transformers mapping or
-// something.
 pub struct Transformer
 {
 	associated_type_transformers: AssociatedTypeTransformers,
@@ -155,63 +152,45 @@ impl Transformer
 
 		None
 	}
-}
 
-fn get_leaf (ty: &Type)
--> Option <(&Ident, Option <&Punctuated <GenericArgument, Token! [,]>>)>
-{
-	if let Type::Path (ty_path) = ty
+	fn transform_input_box (&mut self, input: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
 	{
-		if let Some (last_segment) = ty_path . path . segments . last ()
-		{
-			let ident = &last_segment . ident;
-			let args = if let PathArguments::AngleBracketed (angle_args) =
-				&last_segment . arguments
-			{
-				Some (&angle_args . args)
-			}
-			else { None };
+		let inner_input = parse_quote! ((*#input));
 
-			Some ((ident, args))
-		}
-		else
+		if let (inner_input, true) =
+			self . transform_input (inner_input, inner_type)?
 		{
-			None
+			let input = parse_quote!
+			(
+				Box::new (#inner_input)
+			);
+
+			return Ok ((input, true));
 		}
+
+		Ok ((input, false))
 	}
-	else { None }
-}
 
-macro_rules! define_is_container
-{
-	($fn_name: ident, $type_str: expr) =>
+	fn transform_input_option (&mut self, input: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
 	{
-		fn $fn_name (ty: &Type) -> Option <&Type>
+		let inner_input = parse_quote! (v);
+
+		if let (inner_input, true) =
+			self . transform_input (inner_input, inner_type)?
 		{
-			if let Some ((ident, Some (args))) = get_leaf (ty)
-			{
-				if ident == $type_str && args . len () == 2
-				{
-					if let Some (GenericArgument::Type (ty)) = args . first ()
-					{
-						return Some (ty);
-					}
-				}
-			}
+			let input = parse_quote!
+			(
+				#input . map (|v| #inner_input)
+			);
 
-			None
+			return Ok ((input, true));
 		}
+
+		Ok ((input, false))
 	}
-}
 
-define_is_container! (is_result, "Result");
-define_is_container! (is_box, "Box");
-define_is_container! (is_pin, "Pin");
-define_is_container! (is_rc, "Rc");
-define_is_container! (is_arc, "Arc");
-
-impl Transformer
-{
 	fn transform_input_result (&mut self, input: Expr, inner_type: &Type)
 	-> Result <(Expr, bool)>
 	{
@@ -231,20 +210,64 @@ impl Transformer
 		Ok ((input, false))
 	}
 
-	fn transform_input_box (&mut self, input: Expr, inner_type: &Type)
+	fn transform_input_tuple
+	(
+		&mut self,
+		input: Expr,
+		inner_types: &Punctuated <Type, Token! [,]>
+	)
 	-> Result <(Expr, bool)>
 	{
-		let inner_input = parse_quote! (*#input);
+		let mut any_transformed: bool = false;
+
+		let expr_var: Ident = parse_quote! (v);
+		let mut inner_inputs = Punctuated::<Expr, Token! [,]>::new ();
+
+		for i in 0..(inner_types . len ())
+		{
+			let idx = Index::from (i);
+			let inner_input = parse_quote! (#expr_var . #idx);
+			let inner_type = &inner_types [i];
+			let (inner_input, input_transformed) =
+				self . transform_input (inner_input, inner_type)?;
+
+			inner_inputs . push (inner_input);
+			any_transformed |= input_transformed;
+		}
+
+		if any_transformed
+		{
+			let input = parse_quote!
+			(
+				{
+					let #expr_var = #input;
+
+					(#inner_inputs)
+				}
+			);
+
+			Ok ((input, true))
+		}
+		else
+		{
+			Ok ((input, false))
+		}
+	}
+
+	fn transform_input_array (&mut self, input: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
+	{
+		let inner_input = parse_quote! (v);
 
 		if let (inner_input, true) =
 			self . transform_input (inner_input, inner_type)?
 		{
 			let input = parse_quote!
 			(
-				Box::new (#inner_input)
+				#input . map (|v| #inner_input)
 			);
 
-			return Ok ((input, true));
+			return Ok ((input, true))
 		}
 
 		Ok ((input, false))
@@ -300,61 +323,71 @@ impl Transformer
 				true
 			));
 		}
-		else if let Some (inner_type) = is_result (input_type)
+		else if let Some (BoxType {boxed_type, ..}) =
+			BoxType::match_type (input_type)
 		{
-			return self . transform_input_result (input, inner_type);
+			return self . transform_input_box (input, &boxed_type);
 		}
-		else if let Some (inner_type) = is_box (input_type)
+		else if let Some (OptionType {option_type, ..}) =
+			OptionType::match_type (input_type)
 		{
-			return self . transform_input_box (input, inner_type);
+			return self . transform_input_option (input, &option_type);
 		}
-		else if let Some (inner_type) = is_pin (input_type)
+		else if let Some (ResultType {result_type, ..}) =
+			ResultType::match_type (input_type)
 		{
-			if let (_, true) =
-				self . transform_input (input . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_type,
-						"Pinned argument values cannot be transformed for forwarding"
-					)
-				)
-			}
+			return self . transform_input_result (input, &result_type);
 		}
-		else if let Some (inner_type) = is_rc (input_type)
+		else if let Some (TupleType {types, ..}) =
+			TupleType::match_type (input_type)
 		{
-			if let (_, true) =
-				self . transform_input (input . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_type,
-						"Rc argument values cannot be transformed for forwarding"
-					)
-				);
-			}
+			return self . transform_input_tuple (input, &types);
 		}
-		else if let Some (inner_type) = is_arc (input_type)
+		else if let Some (ArrayType {ty, ..}) =
+			ArrayType::match_type (input_type)
 		{
-			if let (_, true) =
-				self . transform_input (input . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_type,
-						"Arc argument values cannot be transformed for forwarding"
-					)
-				);
-			}
+			return self . transform_input_array (input, &ty);
 		}
 
 		Ok ((input, false))
+	}
+
+	fn transform_output_box (&mut self, output: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
+	{
+		let inner_output = parse_quote! ((*#output));
+
+		if let (inner_output, true) =
+			self . transform_output (inner_output, inner_type)?
+		{
+			let output = parse_quote!
+			(
+				Box::new (#inner_output)
+			);
+
+			return Ok ((output, true));
+		}
+
+		Ok ((output, false))
+	}
+
+	fn transform_output_option (&mut self, output: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
+	{
+		let inner_output = parse_quote! (v);
+
+		if let (inner_output, true) =
+			self . transform_output (inner_output, inner_type)?
+		{
+			let output = parse_quote!
+			(
+				#output . map (|v| #inner_output)
+			);
+
+			return Ok ((output, true));
+		}
+
+		Ok ((output, false))
 	}
 
 	fn transform_output_result (&mut self, output: Expr, inner_type: &Type)
@@ -376,20 +409,64 @@ impl Transformer
 		Ok ((output, false))
 	}
 
-	fn transform_output_box (&mut self, output: Expr, inner_type: &Type)
+	fn transform_output_tuple
+	(
+		&mut self,
+		output: Expr,
+		inner_types: &Punctuated <Type, Token! [,]>
+	)
 	-> Result <(Expr, bool)>
 	{
-		let inner_output = parse_quote! (*#output);
+		let mut any_transformed: bool = false;
+
+		let expr_var: Ident = parse_quote! (v);
+		let mut inner_outputs = Punctuated::<Expr, Token! [,]>::new ();
+
+		for i in 0..(inner_types . len ())
+		{
+			let idx = Index::from (i);
+			let inner_output = parse_quote! (#expr_var . #idx);
+			let inner_type = &inner_types [i];
+			let (inner_output, output_transformed) =
+				self . transform_output (inner_output, inner_type)?;
+
+			inner_outputs . push (inner_output);
+			any_transformed |= output_transformed;
+		}
+
+		if any_transformed
+		{
+			let output = parse_quote!
+			(
+				{
+					let #expr_var = #output;
+
+					(#inner_outputs)
+				}
+			);
+
+			Ok ((output, true))
+		}
+		else
+		{
+			Ok ((output, false))
+		}
+	}
+
+	fn transform_output_array (&mut self, output: Expr, inner_type: &Type)
+	-> Result <(Expr, bool)>
+	{
+		let inner_output = parse_quote! (v);
 
 		if let (inner_output, true) =
 			self . transform_output (inner_output, inner_type)?
 		{
 			let output = parse_quote!
 			(
-				Box::new (#inner_output)
+				#output . map (|v| #inner_output)
 			);
 
-			return Ok ((output, true));
+			return Ok ((output, true))
 		}
 
 		Ok ((output, false))
@@ -435,58 +512,30 @@ impl Transformer
 				)
 			);
 		}
-		else if let Some (inner_type) = is_result (output_type)
+		else if let Some (BoxType {boxed_type, ..}) =
+			BoxType::match_type (output_type)
 		{
-			return self . transform_output_result (output, inner_type);
+			return self . transform_output_box (output, &boxed_type);
 		}
-		else if let Some (inner_type) = is_box (output_type)
+		else if let Some (OptionType {option_type, ..}) =
+			OptionType::match_type (output_type)
 		{
-			return self . transform_output_box (output, inner_type);
+			return self . transform_output_option (output, &option_type);
 		}
-		else if let Some (inner_type) = is_pin (output_type)
+		else if let Some (ResultType {result_type, ..}) =
+			ResultType::match_type (output_type)
 		{
-			if let (_output, true) =
-				self . transform_output (output . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						output_type,
-						"Pinned return values cannot be transformed for forwarding"
-					)
-				);
-			}
+			return self . transform_output_result (output, &result_type);
 		}
-		else if let Some (inner_type) = is_rc (output_type)
+		else if let Some (TupleType {types, ..}) =
+			TupleType::match_type (output_type)
 		{
-			if let (_output, true) =
-				self . transform_output (output . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						output_type,
-						"Rc return values cannot be transformed for forwarding"
-					)
-				);
-			}
+			return self . transform_output_tuple (output, &types);
 		}
-		else if let Some (inner_type) = is_arc (output_type)
+		else if let Some (ArrayType {ty, ..}) =
+			ArrayType::match_type (output_type)
 		{
-			if let (_output, true) =
-				self . transform_output (output . clone (), inner_type)?
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						output_type,
-						"Arc return values cannot be transformed for forwarding"
-					)
-				);
-			}
+			return self . transform_output_array (output, &ty);
 		}
 
 		Ok ((output, false))
