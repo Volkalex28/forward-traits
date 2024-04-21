@@ -399,9 +399,9 @@ available.
    * `&Self`: `std::convert::AsRef <DelegatedType>`
    * `&mut Self`: `std::convert::AsMut <DelegatedType>`
 
-   Besides these specific types, `Result` and `Box` are also transformed if
-   their contents are a transformable type.  All arguments of a convertible type
-   are converted, not just the receiver.
+   Besides these specific types, `Box`, `Option`, `Result`, tuple types, and
+   array types are also transformed if their contents are a transformable type.
+   All arguments of a convertible type are converted, not just the receiver.
 
    The return value may be converted as well, if it is a form of `Self` type.
    This uses the following trait.
@@ -419,9 +419,9 @@ available.
    is required in the case of a tuple struct.
 
    `Self`, `&Self`, and `&mut Self` typed arguments are tranformed via member
-   access.  Like with conversion, `Result` and `Box` forms of transformable
-   types are also transformed.  Member delegation cannot transform return
-   values.
+   access.  Like with conversion, `Box`, `Option`, `Result`, tuple types, and
+   array types are also transformed if they contain some form of `Self`.  Member
+   delegation cannot transform return values.
 
 ## Additional Transformations
 
@@ -450,6 +450,25 @@ the base type is explicitly written out rather than being referred to with the
 The base type _can_ be used on the left-hand side of an additional
 transformation to specify that explicit forms of the base type should be
 transformed as well.
+
+### Associated Type Transformations
+
+If the type on the LHS of an additional transformation is an associated type (of
+the form `Self::TypeName`), then some additional things will happen.
+
+Associated types in forwarded trait implementations will be assigned to the type
+on the RHS of the additional transformation, rather than to the associated type
+provided by the delegated trait implementation.  Values of that associated type
+will be transformed, like with other transformations.
+
+If the associated type takes any lifetime parameters, then the LHS of the
+additional transformation should be prefixed with quanfitied lifetimes (`for
+<Lifetime, ...>`).  The overall syntax for an associated type on the LHS of an
+additional transformation looks like `for <Lifetime, ...> Self::TypeName
+<Lifetime, ...>`.
+
+Due to language limitations, it is generally not possible to transform
+associated types that take type or const parameters.
 
 ## Forwarded Traits
 
