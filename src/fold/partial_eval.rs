@@ -109,6 +109,7 @@ impl PartialEval
 		}
 	}
 
+	#[allow (dead_code)]
 	pub fn fold_associated_type_transformer
 	(
 		&mut self,
