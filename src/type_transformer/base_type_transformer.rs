@@ -1,4 +1,4 @@
-use syn::{Ident, Type, Generics, Fields, Token, parse_quote};
+use syn::{parse_quote, Block, Fields, Generics, Ident, Token, Type};
 use syn::parse::Result;
 use syn_derive::{Parse, ToTokens};
 
@@ -9,6 +9,7 @@ use crate::syn::member::Member;
 use crate::value_transformer
 ::{
 	conversion_transformer::ConversionTransformer,
+	custom_transformer::CustomTransformer,
 	member_transformer::MemberTransformer,
 	value_transformer::ValueTransformer
 };
@@ -20,6 +21,17 @@ pub enum BaseTransformType
 {
 	#[parse (peek = Token! [->])]
 	Conversion {arrow_token: Token! [->], to_type: Type},
+
+	#[parse (peek = Token! [|])]
+    Custom 
+    {
+        or1_token: Token! [|],
+        ident: Ident,
+        or2_token: Token! [|],
+        arrow_token: Token! [->],
+        to_type: Type,
+        block: Block
+    },
 
 	#[parse (peek = Token! [.])]
 	Member {dot_token: Token! [.], member: Member}
@@ -58,6 +70,11 @@ impl BaseTypeTransformer
 				to_type,
 				ValueTransformer::from (ConversionTransformer::new ())
 			),
+            BaseTransformType::Custom { ident, to_type, block, .. } =>
+            (
+                to_type,
+                ValueTransformer::from (CustomTransformer::new (ident, block))
+            ),
 			BaseTransformType::Member {member, ..} =>
 			(
 				member . get_member_type (fields)?,

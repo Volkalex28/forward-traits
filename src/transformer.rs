@@ -26,7 +26,7 @@ use syn
 use syn::punctuated::Punctuated;
 use syn::parse::{Result, Error};
 use syn::fold::Fold;
-use quote::ToTokens;
+use quote::{quote, ToTokens};
 
 use crate::syn::transformable_types::*;
 
@@ -616,6 +616,7 @@ impl Transformer
 				output,
 				..
 			},
+            attrs,
 			..
 		}
 			= item_fn;
@@ -645,15 +646,18 @@ impl Transformer
 			call_expr
 		};
 
+        let await_expr = asyncness.is_some().then(|| quote! { .await });
+
 		let (impl_generics, _, where_clause) = generics . split_for_impl ();
 
 		let item_fn = parse_quote!
 		{
+            #(#attrs)*
 			#constness #asyncness #unsafety fn #ident #impl_generics (#inputs)
 			#output
 			#where_clause
 			{
-				#body_expr
+				#body_expr #await_expr
 			}
 		};
 
