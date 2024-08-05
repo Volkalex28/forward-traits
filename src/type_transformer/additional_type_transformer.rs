@@ -1,4 +1,4 @@
-use syn::{Type, BoundLifetimes, Token};
+use syn::{Block, BoundLifetimes, Ident, Token, Type};
 use syn_derive::{Parse, ToTokens};
 
 use crate::syn::member::Member;
@@ -7,6 +7,7 @@ use crate::syn::from_type::FromType;
 use crate::value_transformer
 ::{
 	conversion_transformer::ConversionTransformer,
+	custom_transformer::CustomTransformer,
 	member_transformer::MemberTransformer,
 	value_transformer::ValueTransformer
 };
@@ -20,12 +21,23 @@ pub enum TransformType
 	#[parse (peek = Token! [->])]
 	Conversion (Token! [->]),
 
+	#[parse (peek = Token! [|])]
+    Custom 
+    {
+        or1_token: Token! [|],
+        ident: Ident,
+        or2_token: Token! [|],
+        block: Block,
+        arrow_token: Token! [->]
+    },
+
 	#[parse (peek = Token! [.])]
 	Member
 	{
 		dot_token: Token! [.],
 		member: Member,
-		colon_token: Token! [:]
+		colon_token: Token! [:],
+        to_type: Type,
 	}
 }
 
@@ -37,8 +49,10 @@ impl TransformType
 		{
 			TransformType::Conversion (_) =>
 				ValueTransformer::from (ConversionTransformer::new ()),
+            TransformType::Custom {ident, block, ..} =>
+                ValueTransformer::from (CustomTransformer::new (ident, block)),
 			TransformType::Member {member, ..} =>
-				ValueTransformer::from (MemberTransformer::new (member))
+                ValueTransformer::from (MemberTransformer::new (member))
 		}
 	}
 }

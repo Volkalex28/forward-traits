@@ -39,7 +39,7 @@ impl ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#from_type as std::convert::Into <#to_type>>::into (#input)
+			<#from_type as core::convert::Into <#to_type>>::into (#input)
 		);
 
 		Ok (input)
@@ -58,7 +58,7 @@ impl ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#from_type as std::convert::AsRef <#to_type>>::as_ref (#input)
+			<#from_type as core::convert::AsRef <#to_type>>::as_ref (#input)
 		);
 
 		Ok (input)
@@ -77,7 +77,7 @@ impl ConversionTransformer
 
 		let input = parse_quote!
 		(
-			<#from_type as std::convert::AsMut <#to_type>>::as_mut (#input)
+			<#from_type as core::convert::AsMut <#to_type>>::as_mut (#input)
 		);
 
 		Ok (input)
@@ -96,7 +96,7 @@ impl ConversionTransformer
 
 		let output = parse_quote!
 		(
-			<#from_type as std::convert::From <#to_type>>::from (#output)
+			<#from_type as core::convert::From <#to_type>>::from (#output)
 		);
 
 		Ok (output)
@@ -115,7 +115,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#lifetimes #from_type: std::convert::Into <#to_type>)
+				parse_quote! (#lifetimes #from_type: core::convert::Into <#to_type>)
 			);
 		}
 
@@ -123,7 +123,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#lifetimes #from_type: std::convert::AsRef <#to_type>)
+				parse_quote! (#lifetimes #from_type: core::convert::AsRef <#to_type>)
 			);
 		}
 
@@ -131,7 +131,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#lifetimes #from_type: std::convert::AsMut <#to_type>)
+				parse_quote! (#lifetimes #from_type: core::convert::AsMut <#to_type>)
 			);
 		}
 
@@ -139,7 +139,7 @@ impl ConversionTransformer
 		{
 			predicates . push
 			(
-				parse_quote! (#lifetimes #from_type: std::convert::From <#to_type>)
+				parse_quote! (#lifetimes #from_type: core::convert::From <#to_type>)
 			);
 		}
 	}

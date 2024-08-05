@@ -31,7 +31,7 @@ impl CustomTransformer
         let ident = &self . ident;
 		let block = &self . block;
 
-        let input = parse_quote!
+        let output = parse_quote!
         (
             {
                 let #ident = #input;
@@ -41,7 +41,7 @@ impl CustomTransformer
             } 
         );
 
-		Ok (input)
+		Ok (output)
     }
 
 	pub fn transform_input
@@ -72,5 +72,15 @@ impl CustomTransformer
 	-> Result <Expr>
 	{
 		self . transform (input)
+	}
+
+	pub fn transform_output
+	(
+		&mut self,
+		output: Expr
+	)
+	-> Result <Expr>
+	{
+		self . transform (output)
 	}
 }

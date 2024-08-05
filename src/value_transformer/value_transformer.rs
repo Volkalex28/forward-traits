@@ -112,14 +112,8 @@ impl ValueTransformer
 		{
 			Self::Conversion (conversion_transformer) => conversion_transformer
 				. transform_output (output, from_type, to_type),
-			Self::Custom (_custom_transformer) => Err
-			(
-				Error::new_spanned
-				(
-					from_type,
-					"Custom delegation cannot transform return values for forwarding"
-				)
-			),
+			Self::Custom (custom_transformer) => custom_transformer
+                . transform_output(output),
 			Self::Member (_member_transformer) => Err
 			(
 				Error::new_spanned

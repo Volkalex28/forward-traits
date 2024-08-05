@@ -7,7 +7,7 @@ use forward_traits
 
 supply_forwarding_info_for_trait!
 (
-	std::clone::Clone,
+	core::clone::Clone,
 	trait { fn clone (&self) -> Self; }
 );
 

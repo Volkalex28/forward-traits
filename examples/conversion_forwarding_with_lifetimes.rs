@@ -7,11 +7,11 @@ use forward_traits
 
 supply_forwarding_info_for_trait!
 (
-	std::convert::TryFrom,
+	core::convert::TryFrom,
 	trait <T>
 	{
 		type Error;
-		fn try_from (value: T) -> std::result::Result <Self, Self::Error>;
+		fn try_from (value: T) -> core::result::Result <Self, Self::Error>;
 	}
 );
 

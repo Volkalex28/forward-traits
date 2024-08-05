@@ -28,9 +28,9 @@ pub enum BaseTransformType
         or1_token: Token! [|],
         ident: Ident,
         or2_token: Token! [|],
+        block: Block,
         arrow_token: Token! [->],
-        to_type: Type,
-        block: Block
+        to_type: Type
     },
 
 	#[parse (peek = Token! [.])]
@@ -59,6 +59,7 @@ impl BaseTypeTransformer
 	-> Result <(Type, Type, IndependentTypeTransformer)>
 	{
 		let base_type_ident = &self . base_type_ident;
+        let base_type_generics = base_type_generics . split_for_impl() . 1;
 		let base_type: Type = parse_quote! (#base_type_ident #base_type_generics);
 
 		let from_type: Type = parse_quote! (Self);
